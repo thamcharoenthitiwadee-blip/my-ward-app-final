@@ -25,9 +25,7 @@ export default function WardShiftApp() {
           else setNurseName(`ไม่พบชื่อ (รหัส: ${savedID})`);
         })
         .catch(() => setNurseName("เชื่อมต่อฐานข้อมูลไม่ได้"));
-    } else {
-      window.location.href = "/"; 
-    }
+    } else { window.location.href = "/"; }
   }, []);
 
   const fetchDashboardData = async () => {
@@ -120,7 +118,6 @@ export default function WardShiftApp() {
                         ))}
                       </div>
 
-                      {/* ⭐️ ปรับปรุงใหม่: แถบคำอธิบายแบบชัดเจน ⭐️ */}
                       {shifts[id].workType === 'NORMAL' ? (
                         <div className="space-y-1">
                           <p className="text-[11px] font-black text-blue-600 flex items-center gap-1">⏱️ ล่วงเวลา (ระบุเป็นจำนวนชั่วโมง):</p>
@@ -137,18 +134,17 @@ export default function WardShiftApp() {
                 </div>
               ))}
             </div>
-
             <button onClick={handleSaveToSheet} disabled={isSaving} className="w-full bg-green-600 text-white py-5 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition-all">บันทึกลง SHEETS</button>
           </div>
         ) : (
           <div className="bg-white rounded-3xl shadow-xl overflow-hidden border">
             <div className="bg-indigo-700 p-6 text-white flex justify-between items-center">
               <h2 className="text-xl font-bold uppercase tracking-widest">ตารางปฏิบัติงานนรีเวช</h2>
-              <button onClick={fetchDashboardData} className="text-xs bg-indigo-600 px-4 py-2 rounded-full border border-indigo-400">รีเฟรช</button>
+              <button onClick={fetchDashboardData} className="text-xs bg-indigo-600 px-4 py-2 rounded-full border border-indigo-400 hover:bg-indigo-500 transition-all">รีเฟรช</button>
             </div>
             <div className="overflow-x-auto p-2">
               <table className="min-w-full text-[10px] border-collapse">
-                <thead><tr className="bg-slate-100"><th className="border p-2 sticky left-0 bg-slate-100 z-10 w-32 font-bold">ชื่อ-สกุล</th>{Array.from({ length: 31 }, (_, i) => <th key={i} className="border p-1 w-8 text-center font-bold">{i + 1}</th>)}</tr></thead>
+                <thead><tr className="bg-slate-100"><th className="border p-2 sticky left-0 bg-slate-100 z-10 w-32 font-bold text-slate-600">ชื่อ-สกุล</th>{Array.from({ length: 31 }, (_, i) => <th key={i} className="border p-1 w-8 text-center font-bold text-slate-500">{i + 1}</th>)}</tr></thead>
                 <tbody>
                   {Array.from(new Set(sheetData.map(d => d['ชื่อพยาบาล']))).filter(Boolean).map(name => (
                     <tr key={name} className="hover:bg-slate-50 border-b">
@@ -162,19 +158,33 @@ export default function WardShiftApp() {
                           const dObj = new Date(dVal);
                           return dObj.getDate() === day;
                         });
-                        let displayStr = ""; let cellBg = "";
-                        if (dayRecords.length > 0) {
-                          const chars = dayRecords.map(record => {
-                            const s = record['เวร'] || record['shiftName'];
-                            if (s === 'เช้า') return "ช"; if (s === 'บ่าย') return "บ"; if (s === 'ดึก') return "ด";
-                            if (s === 'OFF') return "O"; if (s === 'ลาพักร้อน') return "พ"; if (s === 'ลาป่วย') return "ป";
-                            if (s === 'ลากิจ') return "ก"; if (s === 'ลาคลอด') return "ค"; if (s === 'ลาศึกษาต่อ') return "ร";
-                            if (s === 'ลาพิธีกรรม') return "ศ"; return s ? s.substring(0, 1) : "";
-                          }).filter(c => c !== "");
-                          displayStr = chars.join("/");
-                          cellBg = dayRecords.length === 1 ? (dayRecords[0]['เวร'] === 'เช้า' ? "bg-yellow-50" : dayRecords[0]['เวร'] === 'บ่าย' ? "bg-orange-50" : dayRecords[0]['เวร'] === 'ดึก' ? "bg-indigo-50" : "bg-slate-100") : "bg-white";
-                        }
-                        return <td key={i} className={`border p-1 text-center font-bold h-10 text-[9px] ${cellBg}`}>{displayStr}</td>;
+
+                        if (dayRecords.length === 0) return <td key={i} className="border p-1 h-10"></td>;
+
+                        let cellBg = dayRecords.length === 1 ? (dayRecords[0]['เวร'] === 'เช้า' ? "bg-yellow-50" : dayRecords[0]['เวร'] === 'บ่าย' ? "bg-orange-50" : dayRecords[0]['เวร'] === 'ดึก' ? "bg-indigo-50" : "bg-slate-100") : "bg-white";
+
+                        return (
+                          <td key={i} className={`border p-1 text-center h-10 ${cellBg}`}>
+                            <div className="flex flex-row items-center justify-center gap-0.5">
+                              {dayRecords.map((record, index) => {
+                                const s = record['เวร'] || record['shiftName'];
+                                const type = record['ประเภทงาน'] || "";
+                                let char = s === 'เช้า' ? "ช" : s === 'บ่าย' ? "บ" : s === 'ดึก' ? "ด" : s === 'OFF' ? "O" : s === 'ลาพักร้อน' ? "พ" : s === 'ลาป่วย' ? "ป" : s === 'ลากิจ' ? "ก" : s === 'ลาคลอด' ? "ค" : s === 'ลาศึกษาต่อ' ? "ร" : s === 'ลาพิธีกรรม' ? "ศ" : s.substring(0,1);
+                                
+                                // ⭐️ ส่วนทำ "ตัวยก" สำหรับ OT ⭐️
+                                const isSpecial = type !== 'NORMAL' && type !== 'LEAVE' && type !== "";
+                                
+                                return (
+                                  <span key={index} className="inline-flex items-start">
+                                    <span className="font-bold text-[10px] text-slate-800">{char}</span>
+                                    {isSpecial && <span className="text-[6px] font-black text-red-500 leading-none ml-0.5">{type === 'OT' ? 'OT' : type.substring(0,2)}</span>}
+                                    {index < dayRecords.length - 1 && <span className="text-[10px] text-slate-300 mx-0.5">/</span>}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </td>
+                        );
                       })}
                     </tr>
                   ))}
