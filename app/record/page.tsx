@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 export default function WardShiftApp() {
   const [view, setView] = useState<'RECORD' | 'DASHBOARD'>('RECORD');
@@ -11,31 +11,29 @@ export default function WardShiftApp() {
   const [leaveType, setLeaveType] = useState<string | null>(null);
 
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzY8umdvLZWC1haEHe8kYuRRFCi8OUgYNRIK-7yzqlESRxG99p9E7sbmOk8bkKeDoVGVg/exec";
-
   const initialShift = { active: false, workType: 'NORMAL', hours: 8, extraHours: 0 };
   const [shifts, setShifts] = useState({ morn: { ...initialShift }, aft: { ...initialShift }, night: { ...initialShift } });
 
-  useEffect(() => {
+  const fetchData = useCallback(async () => {
     const savedID = localStorage.getItem("nurse_id");
-    if (savedID) {
-      setNurseID(savedID);
-      fetch(`${SCRIPT_URL}?action=getNurseName&id=${savedID}&t=${Date.now()}`)
-        .then(res => res.text())
-        .then(name => {
-          if (name && !name.includes("<")) setNurseName(name.trim());
-          else setNurseName("ไม่พบรหัส: " + savedID);
-        })
-        .catch(() => setNurseName("เชื่อมต่อไม่ได้"));
-
-      fetch(`${SCRIPT_URL}?t=${Date.now()}`)
-        .then(res => res.json())
-        .then(data => setSheetData(data))
-        .catch(() => {});
-    } else { window.location.href = "/"; }
+    if (!savedID) { window.location.href = "/"; return; }
+    setNurseID(savedID);
+    try {
+      // ดึงชื่อพยาบาล
+      const nRes = await fetch(`${SCRIPT_URL}?action=getNurseName&id=${savedID}&t=${Date.now()}`);
+      const nText = await nRes.text();
+      setNurseName(nText.trim());
+      // ดึงข้อมูล Dashboard
+      const dRes = await fetch(`${SCRIPT_URL}?t=${Date.now()}`);
+      const dData = await dRes.json();
+      setSheetData(dData || []);
+    } catch (err) { setNurseName("เชื่อมต่อฐานข้อมูลไม่ได้"); }
   }, []);
 
+  useEffect(() => { fetchData(); }, [fetchData]);
+
   const handleSaveToSheet = async () => {
-    if (nurseName.includes("กำลังดึง") || nurseName.includes("ไม่ได้")) return alert("รอชื่อขึ้นก่อนนะครับ");
+    if (nurseName.includes("กำลังดึง") || nurseName.includes("ไม่ได้")) return alert("รอให้ชื่อพยาบาลขึ้นก่อนนะครับ");
     setIsSaving(true);
     try {
       const activeShifts = Object.entries(shifts).filter(([_, d]) => d.active);
@@ -56,43 +54,49 @@ export default function WardShiftApp() {
       for (const p of payloads) {
         await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(p) });
       }
-      alert("✅ บันทึกสำเร็จ!");
-      window.location.reload(); 
-    } catch (e) { alert("เกิดข้อผิดพลาด"); }
+      alert("✅ บันทึกข้อมูลสำเร็จ!");
+      setLeaveType(null);
+      setShifts({ morn: { ...initialShift }, aft: { ...initialShift }, night: { ...initialShift } });
+      fetchData();
+    } catch (e) { alert("บันทึกผิดพลาด"); }
     setIsSaving(false);
   };
 
   return (
-    <div className="p-4 bg-slate-100 min-h-screen font-sans">
+    <div className="p-4 bg-slate-100 min-h-screen font-sans text-slate-900">
       <div className="max-w-md mx-auto space-y-4">
-        <div className="flex bg-white p-1 rounded-2xl border shadow-sm">
-          <button onClick={() => setView('RECORD')} className={`flex-1 py-3 rounded-xl font-bold ${view === 'RECORD' ? 'bg-green-600 text-white shadow-md' : 'text-slate-400'}`}>บันทึกเวร</button>
-          <button onClick={() => setView('DASHBOARD')} className={`flex-1 py-3 rounded-xl font-bold ${view === 'DASHBOARD' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>ตารางเวร Grid</button>
+        {/* สลับหน้า */}
+        <div className="flex bg-white p-1 rounded-2xl shadow-sm border">
+          <button onClick={() => setView('RECORD')} className={`flex-1 py-3 rounded-xl font-bold transition-all ${view === 'RECORD' ? 'bg-green-600 text-white shadow-md' : 'text-slate-400'}`}>บันทึกเวร</button>
+          <button onClick={() => setView('DASHBOARD')} className={`flex-1 py-3 rounded-xl font-bold transition-all ${view === 'DASHBOARD' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>ตารางเวร Grid</button>
         </div>
 
         {view === 'RECORD' ? (
           <div className="bg-white rounded-3xl shadow-xl p-6 space-y-6 border-t-8 border-green-500">
-            <div className="bg-green-50 p-4 rounded-2xl border border-green-100">
-              <h2 className="text-xl font-black text-slate-800">{nurseName}</h2>
+            {/* ส่วนแสดงชื่อพยาบาลชุดเดิม */}
+            <div className={`p-4 rounded-2xl border ${nurseName.includes("ไม่ได้") ? "bg-red-50" : "bg-green-50 border-green-100"}`}>
+              <h2 className="text-xl font-black">{nurseName}</h2>
               <p className="text-xs text-slate-400">ID: {nurseID}</p>
             </div>
             
             <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full p-3 bg-slate-50 border-2 rounded-xl font-bold outline-none" />
 
+            {/* วันหยุด / ลา */}
             <div className="grid grid-cols-3 gap-2">
               {['OFF', 'ลาพักร้อน', 'ลาป่วย', 'ลากิจ', 'ลาคลอด', 'ลาศึกษาต่อ', 'ลาพิธีกรรม'].map(type => (
                 <button key={type} onClick={() => { setLeaveType(leaveType === type ? null : type); setShifts({ morn: { ...initialShift }, aft: { ...initialShift }, night: { ...initialShift } }); }}
-                  className={`py-2 rounded-lg text-[10px] font-bold border-2 ${leaveType === type ? 'bg-orange-500 text-white border-orange-500 shadow-md' : 'bg-white text-slate-400 border-slate-100'}`}
+                  className={`py-2 rounded-lg text-[10px] font-bold border-2 transition-all ${leaveType === type ? 'bg-orange-500 text-white border-orange-500 shadow-md' : 'bg-white text-slate-400'}`}
                 >{type}</button>
               ))}
             </div>
 
+            {/* บันทึกเวร */}
             <div className={`space-y-4 ${leaveType ? 'opacity-20 pointer-events-none' : ''}`}>
               {(['morn', 'aft', 'night'] as const).map(id => (
-                <div key={id} className={`p-4 rounded-2xl border-2 ${shifts[id].active ? 'border-green-500 bg-white shadow-md' : 'bg-slate-50 border-slate-50'}`}>
+                <div key={id} className={`p-4 rounded-2xl border-2 transition-all ${shifts[id].active ? 'border-green-500 bg-white shadow-md' : 'bg-slate-50 border-slate-50'}`}>
                   <div className="flex items-center gap-3 mb-3">
                     <input type="checkbox" checked={shifts[id].active} onChange={() => setShifts({...shifts, [id]: {...shifts[id], active: !shifts[id].active}})} className="w-6 h-6 accent-green-600" />
-                    <span className="font-black text-lg text-slate-700">{id === 'morn' ? '☀️ เช้า' : id === 'aft' ? '⛅ บ่าย' : '🌙 ดึก'}</span>
+                    <span className="font-bold text-lg text-slate-700">{id === 'morn' ? '☀️ เช้า' : id === 'aft' ? '⛅ บ่าย' : '🌙 ดึก'}</span>
                   </div>
                   {shifts[id].active && (
                     <div className="space-y-4">
@@ -102,7 +106,9 @@ export default function WardShiftApp() {
                         ))}
                       </div>
                       <div className={`flex items-center gap-2 p-2 rounded-lg border-2 ${shifts[id].workType === 'NORMAL' ? 'bg-blue-50 border-blue-100' : 'bg-amber-50 border-amber-100'}`}>
-                        <span className={`text-[10px] font-bold ${shifts[id].workType === 'NORMAL' ? 'text-blue-600' : 'text-amber-600'}`}>{shifts[id].workType === 'NORMAL' ? '⏱️ ล่วงเวลา (ชม.):' : '⏱️ จำนวน (ชม.):'}</span>
+                        <span className={`text-[10px] font-bold ${shifts[id].workType === 'NORMAL' ? 'text-blue-600' : 'text-amber-600'}`}>
+                          {shifts[id].workType === 'NORMAL' ? '⏱️ ล่วงเวลา (ชม.):' : '⏱️ จำนวน (ชม.):'}
+                        </span>
                         <input type="number" value={shifts[id].workType === 'NORMAL' ? shifts[id].extraHours : shifts[id].hours} onChange={(e) => setShifts({...shifts, [id]: {...shifts[id], [shifts[id].workType === 'NORMAL' ? 'extraHours' : 'hours']: Number(e.target.value)}})} className="w-20 p-1 border-2 rounded text-center font-bold" />
                       </div>
                     </div>
@@ -110,23 +116,29 @@ export default function WardShiftApp() {
                 </div>
               ))}
             </div>
-            <button onClick={handleSaveToSheet} disabled={isSaving} className="w-full bg-green-600 text-white py-5 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition-all">บันทึกลง SHEETS</button>
+
+            <button onClick={handleSaveToSheet} disabled={isSaving || nurseName.includes("กำลังดึง")} className="w-full bg-green-600 text-white py-5 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition-all">บันทึกลง SHEETS</button>
           </div>
         ) : (
+          /* ส่วนตาราง Grid พร้อมตัวยก OT */
           <div className="bg-white rounded-3xl shadow-xl overflow-hidden border">
             <div className="bg-indigo-700 p-6 text-white flex justify-between items-center">
               <h2 className="text-xl font-bold uppercase tracking-widest leading-tight">ตารางปฏิบัติงานนรีเวช</h2>
+              <button onClick={fetchData} className="text-xs bg-indigo-600 px-4 py-2 rounded-full border border-indigo-400">รีเฟรช</button>
             </div>
             <div className="overflow-x-auto p-2">
               <table className="min-w-full text-[10px] border-collapse">
-                <thead><tr className="bg-slate-100"><th className="border p-2 sticky left-0 bg-slate-100 z-10 w-32 font-bold text-slate-600">ชื่อ-สกุล</th>{Array.from({length:31}, (_,i)=><th key={i} className="border p-1 text-center font-bold text-slate-50">{i + 1}</th>)}</tr></thead>
+                <thead><tr className="bg-slate-100"><th className="border p-2 sticky left-0 bg-slate-100 z-10 w-32 font-bold text-slate-600">ชื่อ-สกุล</th>{Array.from({ length: 31 }, (_, i) => <th key={i} className="border p-1 w-8 text-center font-bold text-slate-50">{i + 1}</th>)}</tr></thead>
                 <tbody>
-                  {Array.from(new Set(sheetData.map(d=>d['ชื่อพยาบาล']))).filter(Boolean).map(name => (
+                  {Array.from(new Set(sheetData.map(d => d['ชื่อพยาบาล']))).filter(Boolean).map(name => (
                     <tr key={name} className="hover:bg-slate-50 border-b">
                       <td className="border p-2 font-black text-slate-700 sticky left-0 bg-white z-10 truncate">{name}</td>
-                      {Array.from({length:31}, (_,i)=>{
-                        const day = i+1;
-                        const dRecs = sheetData.filter(d => d['ชื่อพยาบาล'] === name && new Date(d['วันที่']).getDate() === day);
+                      {Array.from({ length: 31 }, (_, i) => {
+                        const day = i + 1;
+                        const dRecs = sheetData.filter(d => {
+                          const dVal = d['วันที่'] || d['date'];
+                          return d['ชื่อพยาบาล'] === name && new Date(dVal).getDate() === day;
+                        });
                         if (dRecs.length === 0) return <td key={i} className="border p-1 h-10"></td>;
                         return (
                           <td key={i} className="border p-1 text-center h-10 bg-white">
