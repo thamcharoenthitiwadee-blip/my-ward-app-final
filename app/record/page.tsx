@@ -23,8 +23,7 @@ export default function WardShiftApp() {
         .then((name) => {
           if (name && name.trim() !== "" && name !== "ไม่พบรายชื่อ") setNurseName(name.trim());
           else setNurseName(`ไม่พบชื่อ (รหัส: ${savedID})`);
-        })
-        .catch(() => setNurseName("เชื่อมต่อฐานข้อมูลไม่ได้"));
+        });
     } else {
       window.location.href = "/"; 
     }
@@ -32,7 +31,7 @@ export default function WardShiftApp() {
 
   const fetchDashboardData = async () => {
     try {
-      const response = await fetch(SCRIPT_URL);
+      const response = await fetch(`${SCRIPT_URL}?t=${new Date().getTime()}`);
       const data = await response.json();
       setSheetData(data);
     } catch (e) { console.error("Fetch Error:", e); }
@@ -77,6 +76,7 @@ export default function WardShiftApp() {
     <div className="p-4 bg-slate-100 min-h-screen font-sans text-slate-900">
       <div className="max-w-4xl mx-auto space-y-4">
         
+        {/* 🔘 เมนูสลับหน้า */}
         <div className="flex bg-white p-1 rounded-2xl shadow-sm border max-w-md mx-auto">
           <button onClick={() => setView('RECORD')} className={`flex-1 py-3 rounded-xl font-bold transition-all ${view === 'RECORD' ? 'bg-green-600 text-white shadow-md' : 'text-slate-400'}`}>บันทึกเวร</button>
           <button onClick={() => setView('DASHBOARD')} className={`flex-1 py-3 rounded-xl font-bold transition-all ${view === 'DASHBOARD' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>ตารางเวร Grid</button>
@@ -84,48 +84,71 @@ export default function WardShiftApp() {
 
         {view === 'RECORD' ? (
           <div className="max-w-md mx-auto bg-white rounded-3xl shadow-xl p-6 space-y-6 border-t-8 border-green-500">
+            {/* 👤 ชื่อพยาบาล */}
             <div className="bg-green-50 p-4 rounded-2xl border">
               <h2 className="text-xl font-black text-slate-800">{nurseName}</h2>
               <p className="text-xs text-slate-400 font-mono">ID: {nurseID}</p>
             </div>
+
+            {/* 📅 วันที่ */}
             <div className="bg-slate-50 p-3 rounded-xl border">
-              <p className="text-[10px] text-slate-400 mb-1 font-bold italic">เลือกวันที่ปฏิบัติงาน/ลา:</p>
+              <p className="text-[10px] text-slate-400 mb-1 font-bold italic">วันที่ปฏิบัติงาน/ลา:</p>
               <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full p-2 bg-white border rounded-lg text-sm font-bold outline-none" />
             </div>
+
+            {/* 🏖️ ปุ่มวันหยุด / วันลา (7 ปุ่มครบ!) */}
             <div className="space-y-3">
-              <p className="text-sm font-black text-orange-600 uppercase">🏖️ วันหยุด / วันลาพัก</p>
+              <p className="text-sm font-black text-orange-600 uppercase tracking-wider">🏖️ วันหยุด / วันลาพัก</p>
               <div className="grid grid-cols-3 gap-2">
                 {['OFF', 'ลาพักร้อน', 'ลาป่วย', 'ลากิจ', 'ลาคลอด', 'ลาศึกษาต่อ', 'ลาพิธีกรรม'].map((type) => (
                   <button key={type} onClick={() => { setLeaveType(leaveType === type ? null : type); setShifts({ morn: { ...initialShift }, aft: { ...initialShift }, night: { ...initialShift } }); }}
-                    className={`py-3 rounded-xl text-[10px] font-bold border-2 transition-all ${leaveType === type ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-slate-400 border-slate-100'}`}
-                  >{type}</button>
+                    className={`py-3 rounded-xl text-[10px] font-bold border-2 transition-all ${leaveType === type ? 'bg-orange-500 text-white border-orange-500 shadow-md scale-95' : 'bg-white text-slate-400 border-slate-100'}`}
+                  >
+                    {type === 'ลาศึกษาต่อ' ? 'เรียนต่อ' : type === 'ลาพิธีกรรม' ? 'ศาสนา' : type}
+                  </button>
                 ))}
               </div>
             </div>
-            <hr />
+
+            <hr className="border-slate-100" />
+
+            {/* 🏥 บันทึกเวร (10 ประเภท พร้อมช่องกรอกชั่วโมง) */}
             <div className={`space-y-4 ${leaveType ? 'opacity-20 pointer-events-none' : ''}`}>
-              <p className="text-sm font-black text-green-600 uppercase">🏥 บันทึกเวรขึ้นจริง</p>
+              <p className="text-sm font-black text-green-600 uppercase tracking-wider">🏥 บันทึกเวรขึ้นจริง</p>
               {(['morn', 'aft', 'night'] as const).map((id) => (
-                <div key={id} className={`p-4 rounded-2xl border-2 ${shifts[id].active ? 'border-green-500 bg-white shadow-md' : 'border-slate-50'}`}>
+                <div key={id} className={`p-4 rounded-2xl border-2 transition-all ${shifts[id].active ? 'border-green-500 bg-white shadow-md' : 'border-slate-50 bg-slate-50'}`}>
                   <div className="flex items-center gap-3">
                     <input type="checkbox" checked={shifts[id].active} onChange={() => setShifts({...shifts, [id]: {...shifts[id], active: !shifts[id].active}})} className="w-6 h-6 accent-green-600" />
-                    <span className="font-bold text-lg">{id === 'morn' ? '☀️ เช้า' : id === 'aft' ? '⛅ บ่าย' : '🌙 ดึก'}</span>
+                    <span className="font-black text-lg text-slate-700">{id === 'morn' ? '☀️ เช้า' : id === 'aft' ? '⛅ บ่าย' : '🌙 ดึก'}</span>
                   </div>
                   {shifts[id].active && (
-                    <div className="mt-3 pt-3 border-t space-y-3">
+                    <div className="mt-3 pt-3 border-t border-slate-100 space-y-3">
                       <div className="flex flex-wrap gap-1">
                         {['NORMAL', 'OT', 'BB', 'UNIT', 'CT', 'OPD', 'REF_NO', 'REF_WITH', 'REF_OUT', 'REF_BACK'].map((t) => (
-                          <button key={t} onClick={() => setShifts({...shifts, [id]: {...shifts[id], workType: t}})} className={`px-2 py-1 rounded text-[9px] font-bold border ${shifts[id].workType === t ? 'bg-green-600 text-white' : 'bg-white text-slate-400'}`}>{t}</button>
+                          <button key={t} onClick={() => setShifts({...shifts, [id]: {...shifts[id], workType: t}})} className={`px-2 py-1 rounded text-[9px] font-bold border-2 ${shifts[id].workType === t ? 'bg-green-600 text-white border-green-600' : 'bg-white text-slate-400 border-slate-100'}`}>{t}</button>
                         ))}
                       </div>
+                      {shifts[id].workType === 'NORMAL' ? (
+                        <div className="flex items-center gap-2 bg-blue-50 p-2 rounded-xl border border-blue-100">
+                          <span className="text-[10px] font-bold text-blue-700 uppercase">ล่วงเวลา (ชม.):</span>
+                          <input type="number" value={shifts[id].extraHours} onChange={(e) => setShifts({...shifts, [id]: {...shifts[id], extraHours: Number(e.target.value)}})} className="w-16 p-1 bg-white border rounded text-center font-bold text-blue-700 outline-none" />
+                        </div>
+                      ) : !shifts[id].workType.startsWith('REF') && (
+                        <div className="flex items-center gap-2 bg-amber-50 p-2 rounded-xl border border-amber-100">
+                          <span className="text-[10px] font-bold text-amber-700 uppercase">จำนวน (ชม.):</span>
+                          <input type="number" value={shifts[id].hours} onChange={(e) => setShifts({...shifts, [id]: {...shifts[id], hours: Number(e.target.value)}})} className="w-16 p-1 bg-white border rounded text-center font-bold text-amber-700 outline-none" />
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               ))}
             </div>
+
             <button onClick={handleSaveToSheet} disabled={isSaving} className="w-full bg-green-600 text-white py-5 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition-all">บันทึกลง SHEETS</button>
           </div>
         ) : (
+          /* 📊 ส่วน Dashboard ตาราง 1-31 วัน */
           <div className="bg-white rounded-3xl shadow-xl overflow-hidden border">
             <div className="bg-indigo-700 p-6 text-white flex justify-between items-center">
               <h2 className="text-xl font-bold uppercase tracking-widest">ตารางปฏิบัติงานนรีเวช</h2>
@@ -145,20 +168,24 @@ export default function WardShiftApp() {
                       <td className="border p-2 font-black text-slate-700 sticky left-0 bg-white shadow-sm z-10 truncate">{name}</td>
                       {Array.from({ length: 31 }, (_, i) => {
                         const day = i + 1;
-                        const record = sheetData.find(d => d['ชื่อพยาบาล'] === name && new Date(d['วันที่']).getDate() === day);
+                        const record = sheetData.find(d => {
+                          if (d['ชื่อพยาบาล'] !== name) return false;
+                          const dateObj = new Date(d['วันที่'] || d['date']);
+                          return dateObj.getDate() === day;
+                        });
                         let char = ""; let color = "";
                         if (record) {
-                          const s = record['เวร'];
+                          const s = record['เวร'] || record['shiftName'];
                           if (s === 'เช้า') { char = "ช"; color = "bg-yellow-50 text-yellow-700"; }
                           else if (s === 'บ่าย') { char = "บ"; color = "bg-orange-50 text-orange-700"; }
                           else if (s === 'ดึก') { char = "ด"; color = "bg-indigo-50 text-indigo-700"; }
-                          else if (s === 'OFF') { char = "O"; color = "bg-slate-100 text-slate-400"; }
-                          else if (s === 'ลาพักร้อน') { char = "พ"; color = "bg-green-50 text-green-700"; }
-                          else if (s === 'ลาป่วย') { char = "ป"; color = "bg-red-50 text-red-700"; }
-                          else if (s === 'ลากิจ') { char = "ก"; color = "bg-pink-50 text-pink-700"; }
-                          else if (s === 'ลาคลอด') { char = "ค"; color = "bg-purple-50 text-purple-700"; }
-                          else if (s === 'ลาศึกษาต่อ') { char = "ร"; color = "bg-cyan-50 text-cyan-700"; }
-                          else if (s === 'ลาพิธีกรรม') { char = "ศ"; color = "bg-amber-50 text-amber-700"; }
+                          else if (s === 'OFF') { char = "O"; color = "bg-slate-200 text-slate-500"; }
+                          else if (s === 'ลาพักร้อน') { char = "พ"; color = "bg-green-100 text-green-700"; }
+                          else if (s === 'ลาป่วย') { char = "ป"; color = "bg-red-100 text-red-700"; }
+                          else if (s === 'ลากิจ') { char = "ก"; color = "bg-pink-100 text-pink-700"; }
+                          else if (s === 'ลาคลอด') { char = "ค"; color = "bg-purple-100 text-purple-700"; }
+                          else if (s === 'ลาศึกษาต่อ') { char = "ร"; color = "bg-cyan-100 text-cyan-700"; }
+                          else if (s === 'ลาพิธีกรรม') { char = "ศ"; color = "bg-amber-100 text-amber-700"; }
                         }
                         return <td key={i} className={`border p-1 text-center font-bold h-10 ${color}`}>{char}</td>;
                       })}
