@@ -34,7 +34,6 @@ export default function WardShiftApp() {
   const handleSaveToSheet = async () => {
     if (nurseName.includes("กำลังดึง")) return alert("รอโหลดชื่อครู่เดียวครับ");
 
-    // เช็กว่าวันนี้เคยบันทึกไปหรือยัง
     const hasDataToday = sheetData.some((d: any) => 
       String(d['ชื่อพยาบาล']).trim() === nurseName && (d['วันที่'] || d['date']).includes(selectedDate)
     );
@@ -88,12 +87,13 @@ export default function WardShiftApp() {
           <div className="bg-white rounded-3xl shadow-xl p-6 space-y-6 border-t-8 border-green-500">
             <div className="bg-green-50 p-4 rounded-2xl border border-green-100">
               <h2 className="text-xl font-black text-slate-800">{nurseName}</h2>
-              <p className="text-xs text-slate-400 font-mono">ID: {nurseID}</p>
+              <p className="text-xs text-slate-400">ID: {nurseID}</p>
             </div>
             <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full p-3 bg-slate-50 border-2 rounded-xl font-bold outline-none" />
 
             <div className="grid grid-cols-3 gap-2">
-              {['OFF', 'ลาพักร้อน', 'ลาป่วย', 'ลากิจ', 'ลาคลอด', 'ลาศึกษาต่อ', 'ลาพิธีกรรม'].map(type => (
+              {/* ปรับแก้ชื่อปุ่ม ลาประกอบศาสนา */}
+              {['OFF', 'ลาพักร้อน', 'ลาป่วย', 'ลากิจ', 'ลาคลอด', 'ลาศึกษาต่อ', 'ลาประกอบศาสนา'].map(type => (
                 <button key={type} onClick={() => { setLeaveType(leaveType === type ? null : type); setShifts({ morn: { ...initialShift }, aft: { ...initialShift }, night: { ...initialShift } }); }}
                   className={`py-2 rounded-lg text-[10px] font-bold border-2 transition-all ${leaveType === type ? 'bg-orange-500 text-white shadow-md' : 'bg-white text-slate-400'}`}
                 >{type}</button>
@@ -114,8 +114,8 @@ export default function WardShiftApp() {
                           <button key={t} onClick={() => setShifts({...shifts, [id]: {...shifts[id], workType: t}})} className={`px-2 py-1 rounded text-[9px] font-bold border-2 ${shifts[id].workType === t ? 'bg-green-600 text-white border-green-600' : 'bg-white text-slate-400'}`}>{t}</button>
                         ))}
                       </div>
-                      <div className={`flex items-center gap-2 p-2 rounded-lg border-2 ${shifts[id].workType === 'NORMAL' ? 'bg-blue-50 border-blue-100' : 'bg-amber-50 border-amber-100'}`}>
-                        <span className={`text-[10px] font-bold ${shifts[id].workType === 'NORMAL' ? 'text-blue-600' : 'text-amber-600'}`}>{shifts[id].workType === 'NORMAL' ? 'ล่วงเวลา (ชม.):' : 'จำนวน (ชม.):'}</span>
+                      <div className="flex items-center gap-2 p-2 rounded-lg border-2 bg-blue-50">
+                        <span className="text-[10px] font-bold text-blue-600">{shifts[id].workType === 'NORMAL' ? 'ล่วงเวลา (ชม.):' : 'จำนวน (ชม.):'}</span>
                         <input type="number" value={shifts[id].workType === 'NORMAL' ? shifts[id].extraHours : shifts[id].hours} onChange={(e) => setShifts({...shifts, [id]: {...shifts[id], [shifts[id].workType === 'NORMAL' ? 'extraHours' : 'hours']: Number(e.target.value)}})} className="w-20 p-1 border-2 rounded text-center font-bold" />
                       </div>
                     </div>
@@ -146,8 +146,23 @@ export default function WardShiftApp() {
                           <td key={i} className="border p-1 text-center h-10 bg-white">
                             <div className="flex flex-row items-center justify-center gap-0.5">
                               {dRecs.map((r, idx) => {
-                                let char = r['เวร'] === 'เช้า' ? "ช" : r['เวร'] === 'บ่าย' ? "บ" : r['เวร'] === 'ดึก' ? "ด" : r['เวร'] === 'OFF' ? "O" : r['เวร'].substring(0,1);
-                                const isSpecial = r['ประเภทงาน'] !== 'NORMAL' && r['ประเภทงาน'] !== 'LEAVE' && r['ประเภทงาน'] !== "";
+                                const s = r['เวร'] || "";
+                                const t = r['ประเภทงาน'] || "";
+                                
+                                // ✨ ส่วนปรับปรุงตัวย่อตามที่แม่ขอ ✨
+                                let char = s.includes('เช้า') ? "ช" : 
+                                           s.includes('บ่าย') ? "บ" : 
+                                           s.includes('ดึก') ? "ด" : 
+                                           s.includes('OFF') ? "O" : 
+                                           s.includes('พักร้อน') ? "พ" : 
+                                           s.includes('ป่วย') ? "ป" : 
+                                           s.includes('กิจ') ? "ก" : 
+                                           s.includes('คลอด') ? "ค" : 
+                                           s.includes('ศึกษา') || s.includes('เรียน') ? "ร" : 
+                                           s.includes('ศาสนา') || s.includes('พิธีกรรม') ? "ศ" : 
+                                           s.substring(0,1);
+
+                                const isSpecial = t !== 'NORMAL' && t !== 'LEAVE' && t !== "";
                                 return (
                                   <span key={idx} className="inline-flex items-start">
                                     <span className="font-bold text-[10px] text-slate-800">{char}</span>
@@ -164,6 +179,9 @@ export default function WardShiftApp() {
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="p-4 bg-slate-50 grid grid-cols-4 gap-1 text-[9px] border-t text-slate-400">
+              <div>ช=เช้า บ=บ่าย ด=ดึก</div><div>O=OFF พ=พักร้อน ป=ป่วย</div><div>ก=กิจ ค=คลอด ร=เรียน</div><div>ศ=ศาสนา</div>
             </div>
           </div>
         )}
