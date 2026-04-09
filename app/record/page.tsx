@@ -14,7 +14,6 @@ export default function WardShiftApp() {
   const initialShift = { active: false, workType: 'NORMAL', hours: 8, extraHours: 0 };
   const [shifts, setShifts] = useState({ morn: { ...initialShift }, aft: { ...initialShift }, night: { ...initialShift } });
 
-  // 🚀 1. ดึงชื่อพยาบาลจากการสแกน QR
   useEffect(() => {
     const savedID = localStorage.getItem("nurse_id");
     if (savedID) {
@@ -31,7 +30,6 @@ export default function WardShiftApp() {
     }
   }, []);
 
-  // 📊 2. ดึงข้อมูล Dashboard
   const fetchDashboardData = async () => {
     try {
       const response = await fetch(`${SCRIPT_URL}?t=${new Date().getTime()}`);
@@ -42,7 +40,6 @@ export default function WardShiftApp() {
 
   useEffect(() => { if (view === 'DASHBOARD') fetchDashboardData(); }, [view]);
 
-  // 💾 3. บันทึกข้อมูล (Logic ครบถ้วน)
   const handleSaveToSheet = async () => {
     if (nurseName.includes("กำลังดึง")) return alert("รอโหลดชื่อครู่เดียวครับ");
     setIsSaving(true);
@@ -74,6 +71,7 @@ export default function WardShiftApp() {
       alert("✅ บันทึกสำเร็จ!");
       setLeaveType(null);
       setShifts({ morn: { ...initialShift }, aft: { ...initialShift }, night: { ...initialShift } });
+      if (view === 'DASHBOARD') fetchDashboardData();
     } catch (e) { alert("เกิดข้อผิดพลาด"); }
     setIsSaving(false);
   };
@@ -82,7 +80,6 @@ export default function WardShiftApp() {
     <div className="p-4 md:p-8 bg-slate-100 min-h-screen font-sans text-slate-900">
       <div className="max-w-4xl mx-auto space-y-4">
         
-        {/* เมนูสลับหน้า */}
         <div className="flex bg-white p-1 rounded-2xl shadow-sm border max-w-md mx-auto">
           <button onClick={() => setView('RECORD')} className={`flex-1 py-3 rounded-xl font-bold transition-all ${view === 'RECORD' ? 'bg-green-600 text-white shadow-md' : 'text-slate-400'}`}>บันทึกเวร</button>
           <button onClick={() => setView('DASHBOARD')} className={`flex-1 py-3 rounded-xl font-bold transition-all ${view === 'DASHBOARD' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>ตารางเวร Grid</button>
@@ -94,10 +91,12 @@ export default function WardShiftApp() {
               <h2 className="text-xl font-black text-slate-800">{nurseName}</h2>
               <p className="text-xs text-slate-400 font-mono">ID: {nurseID}</p>
             </div>
+            
             <div className="bg-slate-50 p-3 rounded-xl border">
-              <p className="text-[10px] text-slate-400 mb-1 font-bold italic">วันที่ปฏิบัติงาน/ลา:</p>
+              <p className="text-[10px] text-slate-400 mb-1 font-bold italic">เลือกวันที่ปฏิบัติงาน/ลา:</p>
               <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full p-2 bg-white border rounded-lg text-sm font-bold outline-none" />
             </div>
+
             <div className="space-y-3">
               <p className="text-sm font-black text-orange-600 uppercase">🏖️ วันหยุด / วันลาพัก</p>
               <div className="grid grid-cols-3 gap-2">
@@ -108,6 +107,121 @@ export default function WardShiftApp() {
                 ))}
               </div>
             </div>
-            <hr />
+
+            <hr className="border-slate-100" />
+
             <div className={`space-y-4 ${leaveType ? 'opacity-20 pointer-events-none' : ''}`}>
-              <p className="text-sm font-black text-green-600
+              <p className="text-sm font-black text-green-600 uppercase">🏥 บันทึกเวรขึ้นจริง</p>
+              {(['morn', 'aft', 'night'] as const).map((id) => (
+                <div key={id} className={`p-4 rounded-2xl border-2 transition-all ${shifts[id].active ? 'border-green-500 bg-white shadow-md' : 'border-slate-50 bg-slate-50'}`}>
+                  <div className="flex items-center gap-3">
+                    <input type="checkbox" checked={shifts[id].active} onChange={() => setShifts({...shifts, [id]: {...shifts[id], active: !shifts[id].active}})} className="w-6 h-6 accent-green-600" />
+                    <span className="font-black text-lg text-slate-700">{id === 'morn' ? '☀️ เช้า' : id === 'aft' ? '⛅ บ่าย' : '🌙 ดึก'}</span>
+                  </div>
+                  {shifts[id].active && (
+                    <div className="mt-3 pt-3 border-t border-slate-100 space-y-3">
+                      <div className="flex flex-wrap gap-1">
+                        {['NORMAL', 'OT', 'BB', 'UNIT', 'CT', 'OPD', 'REF_NO', 'REF_WITH', 'REF_OUT', 'REF_BACK'].map((t) => (
+                          <button key={t} onClick={() => setShifts({...shifts, [id]: {...shifts[id], workType: t}})} className={`px-2 py-1 rounded text-[9px] font-bold border ${shifts[id].workType === t ? 'bg-green-600 text-white' : 'bg-white text-slate-400'}`}>{t}</button>
+                        ))}
+                      </div>
+                      {shifts[id].workType === 'NORMAL' ? (
+                        <input type="number" placeholder="ล่วงเวลา (ชม.)" value={shifts[id].extraHours} onChange={(e) => setShifts({...shifts, [id]: {...shifts[id], extraHours: Number(e.target.value)}})} className="w-full p-2 border rounded text-xs bg-blue-50" />
+                      ) : !shifts[id].workType.startsWith('REF') && (
+                        <input type="number" placeholder="จำนวน (ชม.)" value={shifts[id].hours} onChange={(e) => setShifts({...shifts, [id]: {...shifts[id], hours: Number(e.target.value)}})} className="w-full p-2 border rounded text-xs bg-amber-50" />
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button onClick={handleSaveToSheet} disabled={isSaving} className="w-full bg-green-600 text-white py-5 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition-all">บันทึกลง SHEETS</button>
+          </div>
+        ) : (
+          <div className="bg-white rounded-3xl shadow-xl overflow-hidden border">
+            <div className="bg-indigo-700 p-6 text-white flex justify-between items-center">
+              <h2 className="text-xl font-bold uppercase tracking-widest leading-tight">ตารางปฏิบัติงานนรีเวช</h2>
+              <button onClick={fetchDashboardData} className="text-xs bg-indigo-600 px-4 py-2 rounded-full border border-indigo-400 hover:bg-indigo-500 transition-all">รีเฟรช</button>
+            </div>
+            <div className="overflow-x-auto p-2">
+              <table className="min-w-full text-[10px] border-collapse">
+                <thead>
+                  <tr className="bg-slate-100">
+                    <th className="border p-2 sticky left-0 bg-slate-100 z-10 w-32 text-slate-600 font-bold">ชื่อ-สกุล</th>
+                    {Array.from({ length: 31 }, (_, i) => <th key={i} className="border p-1 w-8 text-center text-slate-500 font-bold">{i + 1}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from(new Set(sheetData.map(d => d['ชื่อพยาบาล']))).filter(Boolean).map(name => (
+                    <tr key={name} className="hover:bg-slate-50 border-b">
+                      <td className="border p-2 font-black text-slate-700 sticky left-0 bg-white shadow-sm z-10 truncate">{name}</td>
+                      {Array.from({ length: 31 }, (_, i) => {
+                        const day = i + 1;
+                        
+                        // ⭐️ ส่วนที่แก้ไขให้ดึง "ทุกเวร" ของวันนี้มาโชว์ ⭐️
+                        const dayRecords = sheetData.filter(d => {
+                          if (d['ชื่อพยาบาล'] !== name) return false;
+                          // เช็กทั้งวันที่เป็นวัตถุ Date และที่เป็น String
+                          const dVal = d['วันที่'] || d['date'];
+                          if (!dVal) return false;
+                          const dObj = new Date(dVal);
+                          return dObj.getDate() === day;
+                        });
+
+                        let displayStr = "";
+                        let cellBg = "";
+
+                        if (dayRecords.length > 0) {
+                          // ดึงตัวย่อของแต่ละเวรมาใส่ Array
+                          const chars = dayRecords.map(record => {
+                            const s = record['เวร'] || record['shiftName'];
+                            if (s === 'เช้า') return "ช";
+                            if (s === 'บ่าย') return "บ";
+                            if (s === 'ดึก') return "ด";
+                            if (s === 'OFF') return "O";
+                            if (s === 'ลาพักร้อน') return "พ";
+                            if (s === 'ลาป่วย') return "ป";
+                            if (s === 'ลากิจ') return "ก";
+                            if (s === 'ลาคลอด') return "ค";
+                            if (s === 'ลาศึกษาต่อ') return "ร";
+                            if (s === 'ลาพิธีกรรม') return "ศ";
+                            return s ? s.substring(0, 1) : "";
+                          }).filter(c => c !== "");
+                          
+                          // คั่นด้วย /
+                          displayStr = chars.join("/");
+                          
+                          // ถ้ามีเวรเดียว ให้ใส่สีตามประเภท
+                          if (dayRecords.length === 1) {
+                            const s = dayRecords[0]['เวร'] || dayRecords[0]['shiftName'];
+                            if (s === 'เช้า') cellBg = "bg-yellow-50 text-yellow-700";
+                            else if (s === 'บ่าย') cellBg = "bg-orange-50 text-orange-700";
+                            else if (s === 'ดึก') cellBg = "bg-indigo-50 text-indigo-700";
+                            else if (s === 'OFF') cellBg = "bg-slate-200 text-slate-500";
+                            else cellBg = "bg-blue-50 text-blue-700";
+                          } else {
+                            // ถ้าหลายเวร เป็นสีขาวเพื่อให้อ่านง่าย
+                            cellBg = "bg-white text-slate-900";
+                          }
+                        }
+
+                        return (
+                          <td key={i} className={`border p-1 text-center font-bold h-10 text-[9px] ${cellBg}`}>
+                            {displayStr}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="p-4 bg-slate-50 grid grid-cols-4 gap-1 text-[9px] border-t">
+              <div>ช=เช้า บ=บ่าย ด=ดึก</div><div>O=OFF พ=พักร้อน ป=ป่วย</div><div>ก=กิจ ค=คลอด ร=เรียน</div><div>ศ=ศาสนา</div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
