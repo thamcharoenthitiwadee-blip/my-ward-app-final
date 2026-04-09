@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function WardShiftApp() {
   const [view, setView] = useState<'RECORD' | 'DASHBOARD'>('RECORD');
@@ -14,7 +14,7 @@ export default function WardShiftApp() {
   const initialShift = { active: false, workType: 'NORMAL', hours: 8, extraHours: 0 };
   const [shifts, setShifts] = useState({ morn: { ...initialShift }, aft: { ...initialShift }, night: { ...initialShift } });
 
-  // 1. ดึงชื่อพยาบาล (กลับไปใช้แบบเดิมที่แม่เคยได้ชื่อ)
+  // 🚀 1. ดึงชื่อพยาบาล (ใช้ Logic เดิมที่เคย Work 100%)
   useEffect(() => {
     const savedID = localStorage.getItem("nurse_id");
     if (savedID) {
@@ -31,7 +31,7 @@ export default function WardShiftApp() {
     }
   }, []);
 
-  // 2. ดึงข้อมูล Dashboard
+  // 📊 2. ดึงข้อมูล Dashboard
   const fetchDashboardData = async () => {
     try {
       const response = await fetch(`${SCRIPT_URL}?t=${new Date().getTime()}`);
@@ -40,20 +40,21 @@ export default function WardShiftApp() {
     } catch (e) { console.error("Fetch Error:", e); }
   };
 
+  useEffect(() => { fetchDashboardData(); }, []); // โหลดข้อมูลเตรียมไว้ตั้งแต่หน้าแรก
   useEffect(() => { if (view === 'DASHBOARD') fetchDashboardData(); }, [view]);
 
-  // 3. บันทึกข้อมูล (เพิ่มระบบดักวันที่ซ้ำตามที่แม่สั่ง)
+  // 💾 3. บันทึกข้อมูล
   const handleSaveToSheet = async () => {
     if (nurseName.includes("กำลังดึง")) return alert("รอโหลดชื่อครู่เดียวครับ");
 
-    // 🕵️ ด่านตรวจ: เช็กวันที่ซ้ำก่อนบันทึก
+    // 🕵️ ด่านตรวจวันที่ซ้ำ (เช็กจากข้อมูลที่โหลดมาแล้ว)
     const hasDataToday = sheetData.some((d: any) => 
-      d['ชื่อพยาบาล'] === nurseName && 
-      (d['วันที่'] || d['date']) === selectedDate
+      String(d['ชื่อพยาบาล']).trim() === nurseName && 
+      (d['วันที่'] || d['date']).includes(selectedDate)
     );
 
     if (hasDataToday) {
-      const isConfirmed = confirm(`⚠️ วันที่ ${selectedDate} คุณเคยบันทึกข้อมูลไปแล้ว\n\nต้องการ "แก้ไข/บันทึกทับ" ข้อมูลเดิมของวันนี้ใช่หรือไม่?`);
+      const isConfirmed = confirm(`⚠️ วันที่ ${selectedDate} คุณเคยบันทึกไปแล้ว\n\nต้องการ "แก้ไข/บันทึกทับ" ข้อมูลเดิมของวันนี้ใช่หรือไม่?`);
       if (!isConfirmed) return;
     }
 
@@ -75,19 +76,15 @@ export default function WardShiftApp() {
             const ref = WORK_TYPES.find(t => t.id === data.workType);
             total = data.workType.startsWith('REF') ? (ref?.price || 0) : (data.hours * OT_RATE);
           }
-          payloads.push({
-            date: selectedDate, nurseName, shiftName: sThai,
-            workType: data.workType, hours: data.workType === 'NORMAL' ? data.extraHours : (data.workType.startsWith('REF') ? 0 : data.hours), total
-          });
+          payloads.push({ date: selectedDate, nurseName, shiftName: sThai, workType: data.workType, hours: data.workType === 'NORMAL' ? data.extraHours : data.hours, total });
         }
       }
 
-      // ส่งข้อมูลไปที่ Google Script (ซึ่งจะลบของเก่าให้อัตโนมัติถ้าซ้ำ)
       for (const p of payloads) {
         await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(p) });
       }
 
-      alert("✅ จัดการข้อมูลเรียบร้อยแล้ว!");
+      alert("✅ บันทึกสำเร็จ!");
       setLeaveType(null);
       setShifts({ morn: { ...initialShift }, aft: { ...initialShift }, night: { ...initialShift } });
       fetchDashboardData();
@@ -106,10 +103,11 @@ export default function WardShiftApp() {
 
         {view === 'RECORD' ? (
           <div className="max-w-md mx-auto bg-white rounded-3xl shadow-xl p-6 space-y-6 border-t-8 border-green-500">
-            <div className="bg-green-50 p-4 rounded-2xl border">
+            <div className="bg-green-50 p-4 rounded-2xl border border-green-100">
               <h2 className="text-xl font-black text-slate-800">{nurseName}</h2>
               <p className="text-xs text-slate-400 font-mono">ID: {nurseID}</p>
             </div>
+            
             <div className="bg-slate-50 p-3 rounded-xl border">
               <p className="text-[10px] text-slate-400 mb-1 font-bold italic">วันที่ปฏิบัติงาน/ลา:</p>
               <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full p-2 bg-white border rounded-lg text-sm font-bold outline-none" />
@@ -143,6 +141,7 @@ export default function WardShiftApp() {
                           <button key={t} onClick={() => setShifts({...shifts, [id]: {...shifts[id], workType: t}})} className={`px-2 py-1 rounded text-[9px] font-bold border-2 ${shifts[id].workType === t ? 'bg-green-600 text-white border-green-600' : 'bg-white text-slate-400 border-slate-100'}`}>{t}</button>
                         ))}
                       </div>
+                      
                       {shifts[id].workType === 'NORMAL' ? (
                         <div className="space-y-1">
                           <p className="text-[11px] font-black text-blue-600 flex items-center gap-1">⏱️ ล่วงเวลา (ชม.):</p>
@@ -159,21 +158,29 @@ export default function WardShiftApp() {
                 </div>
               ))}
             </div>
-            <button onClick={handleSaveToSheet} disabled={isSaving} className="w-full bg-green-600 text-white py-5 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition-all disabled:bg-slate-300">บันทึกลง SHEETS</button>
+
+            <button onClick={handleSaveToSheet} disabled={isSaving} className="w-full bg-green-600 text-white py-5 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition-all">
+              {isSaving ? "กำลังบันทึก..." : "บันทึกลง SHEETS"}
+            </button>
           </div>
         ) : (
           <div className="bg-white rounded-3xl shadow-xl overflow-hidden border">
             <div className="bg-indigo-700 p-6 text-white flex justify-between items-center">
               <h2 className="text-xl font-bold uppercase tracking-widest leading-tight">ตารางปฏิบัติงานนรีเวช</h2>
-              <button onClick={fetchDashboardData} className="text-xs bg-indigo-600 px-4 py-2 rounded-full border border-indigo-400">รีเฟรช</button>
+              <button onClick={fetchDashboardData} className="text-xs bg-indigo-600 px-4 py-2 rounded-full border border-indigo-400 hover:bg-indigo-500 transition-all">รีเฟรช</button>
             </div>
             <div className="overflow-x-auto p-2">
               <table className="min-w-full text-[10px] border-collapse">
-                <thead><tr className="bg-slate-100"><th className="border p-2 sticky left-0 bg-slate-100 z-10 w-32 font-bold text-slate-600">ชื่อ-สกุล</th>{Array.from({ length: 31 }, (_, i) => <th key={i} className="border p-1 w-8 text-center font-bold text-slate-50">{i + 1}</th>)}</tr></thead>
+                <thead>
+                  <tr className="bg-slate-100">
+                    <th className="border p-2 sticky left-0 bg-slate-100 z-10 w-32 font-bold text-slate-600">ชื่อ-สกุล</th>
+                    {Array.from({ length: 31 }, (_, i) => <th key={i} className="border p-1 w-8 text-center font-bold text-slate-50">{i + 1}</th>)}
+                  </tr>
+                </thead>
                 <tbody>
                   {Array.from(new Set(sheetData.map(d => d['ชื่อพยาบาล']))).filter(Boolean).map(name => (
                     <tr key={name} className="hover:bg-slate-50 border-b">
-                      <td className="border p-2 font-black text-slate-700 sticky left-0 bg-white z-10 truncate">{name}</td>
+                      <td className="border p-2 font-black text-slate-700 sticky left-0 bg-white shadow-sm z-10 truncate">{name}</td>
                       {Array.from({ length: 31 }, (_, i) => {
                         const day = i + 1;
                         const dayRecords = sheetData.filter(d => {
@@ -201,9 +208,12 @@ export default function WardShiftApp() {
                         );
                       })}
                     </tr>
-                  ))}
+                  </thead>
                 </tbody>
               </table>
+            </div>
+            <div className="p-4 bg-slate-50 grid grid-cols-4 gap-1 text-[9px] border-t">
+              <div>ช=เช้า บ=บ่าย ด=ดึก</div><div>O=OFF พ=พักร้อน ป=ป่วย</div><div>ก=กิจ ค=คลอด ร=เรียน</div><div>ศ=ศาสนา</div>
             </div>
           </div>
         )}
