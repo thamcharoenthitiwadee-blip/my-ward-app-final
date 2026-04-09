@@ -36,18 +36,48 @@ export default function WardShiftApp() {
     } catch (e) { console.error("Fetch Error:", e); }
   };
 
-  useEffect(() => { if (view === 'DASHBOARD') fetchDashboardData(); }, [view]);
+  useEffect(() => { fetchDashboardData(); }, []); // โหลดข้อมูลไว้เช็กตั้งแต่เริ่ม
 
   const handleSaveToSheet = async () => {
     if (nurseName.includes("กำลังดึง")) return alert("รอโหลดชื่อครู่เดียวครับ");
     setIsSaving(true);
     try {
+      // ดึงข้อมูลล่าสุดมาเช็กก่อนบันทึกทุกครั้ง
+      const response = await fetch(`${SCRIPT_URL}?t=${new Date().getTime()}`);
+      const latestData = await response.json();
+      
       const payloads = [];
       if (leaveType) {
+        // เช็กวันลาซ้ำ
+        const isDuplicate = latestData.some((d: any) => 
+          d['ชื่อพยาบาล'] === nurseName && 
+          new Date(d['วันที่'] || d['date']).toISOString().split('T')[0] === selectedDate &&
+          d['เวร'] === leaveType
+        );
+        if (isDuplicate) {
+          alert(`⚠️ คุณได้บันทึก "${leaveType}" ของวันที่นี้ไปแล้วครับ`);
+          setIsSaving(false); return;
+        }
         payloads.push({ date: selectedDate, nurseName, shiftName: leaveType, workType: 'LEAVE', hours: 0, total: 0 });
       } else {
         const activeShifts = Object.entries(shifts).filter(([_, data]) => data.active);
+        if (activeShifts.length === 0) { alert("กรุณาเลือกเวร หรือ วันลา"); setIsSaving(false); return; }
+        
         for (const [id, data] of activeShifts) {
+          const shiftNameThai = id === 'morn' ? 'เช้า' : id === 'aft' ? 'บ่าย' : 'ดึก';
+          
+          // ⭐️ ด่านตรวจ: เช็กว่าเวรนี้ วันนี้ คนนี้ มีในระบบหรือยัง ⭐️
+          const isDuplicate = latestData.some((d: any) => 
+            d['ชื่อพยาบาล'] === nurseName && 
+            new Date(d['วันที่'] || d['date']).toISOString().split('T')[0] === selectedDate &&
+            d['เวร'] === shiftNameThai
+          );
+
+          if (isDuplicate) {
+            alert(`⚠️ วันที่ ${selectedDate} คุณได้บันทึกเวร "${shiftNameThai}" ไปแล้วครับ ไม่สามารถบันทึกซ้ำได้`);
+            setIsSaving(false); return;
+          }
+
           const OT_RATE = 650 / 8;
           let total = 0;
           if (data.workType === 'NORMAL') total = (id === 'morn' ? 0 : 360) + (data.extraHours * OT_RATE);
@@ -57,16 +87,18 @@ export default function WardShiftApp() {
             total = data.workType.startsWith('REF') ? (ref?.price || 0) : (data.hours * OT_RATE);
           }
           payloads.push({
-            date: selectedDate, nurseName, shiftName: id === 'morn' ? 'เช้า' : id === 'aft' ? 'บ่าย' : 'ดึก',
+            date: selectedDate, nurseName, shiftName: shiftNameThai,
             workType: data.workType, hours: data.workType === 'NORMAL' ? data.extraHours : (data.workType.startsWith('REF') ? 0 : data.hours), total
           });
         }
       }
+      
       for (const p of payloads) { await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(p) }); }
       alert("✅ บันทึกสำเร็จ!");
       setLeaveType(null);
       setShifts({ morn: { ...initialShift }, aft: { ...initialShift }, night: { ...initialShift } });
-    } catch (e) { alert("เกิดข้อผิดพลาด"); }
+      fetchDashboardData(); // อัปเดตตารางทันที
+    } catch (e) { alert("เกิดข้อผิดพลาดในการตรวจสอบข้อมูล"); }
     setIsSaving(false);
   };
 
@@ -109,7 +141,6 @@ export default function WardShiftApp() {
                     <input type="checkbox" checked={shifts[id].active} onChange={() => setShifts({...shifts, [id]: {...shifts[id], active: !shifts[id].active}})} className="w-6 h-6 accent-green-600" />
                     <span className="font-black text-lg text-slate-700">{id === 'morn' ? '☀️ เช้า' : id === 'aft' ? '⛅ บ่าย' : '🌙 ดึก'}</span>
                   </div>
-                  
                   {shifts[id].active && (
                     <div className="mt-3 pt-3 border-t border-slate-100 space-y-4">
                       <div className="flex flex-wrap gap-1">
@@ -117,16 +148,15 @@ export default function WardShiftApp() {
                           <button key={t} onClick={() => setShifts({...shifts, [id]: {...shifts[id], workType: t}})} className={`px-2 py-1 rounded text-[9px] font-bold border-2 ${shifts[id].workType === t ? 'bg-green-600 text-white border-green-600' : 'bg-white text-slate-400 border-slate-100'}`}>{t}</button>
                         ))}
                       </div>
-
                       {shifts[id].workType === 'NORMAL' ? (
                         <div className="space-y-1">
-                          <p className="text-[11px] font-black text-blue-600 flex items-center gap-1">⏱️ ล่วงเวลา (ระบุเป็นจำนวนชั่วโมง):</p>
-                          <input type="number" value={shifts[id].extraHours} onChange={(e) => setShifts({...shifts, [id]: {...shifts[id], extraHours: Number(e.target.value)}})} className="w-full p-3 bg-blue-50 border-2 border-blue-200 rounded-xl font-bold text-blue-800 text-lg text-center" />
+                          <p className="text-[11px] font-black text-blue-600">⏱️ ล่วงเวลา (ชม.):</p>
+                          <input type="number" value={shifts[id].extraHours} onChange={(e) => setShifts({...shifts, [id]: {...shifts[id], extraHours: Number(e.target.value)}})} className="w-full p-3 bg-blue-50 border-2 rounded-xl font-bold text-center" />
                         </div>
                       ) : !shifts[id].workType.startsWith('REF') && (
                         <div className="space-y-1">
-                          <p className="text-[11px] font-black text-amber-600 flex items-center gap-1">⏱️ จำนวนชั่วโมง OT (ระบุเป็นตัวเลข):</p>
-                          <input type="number" value={shifts[id].hours} onChange={(e) => setShifts({...shifts, [id]: {...shifts[id], hours: Number(e.target.value)}})} className="w-full p-3 bg-amber-50 border-2 border-amber-200 rounded-xl font-bold text-amber-800 text-lg text-center" />
+                          <p className="text-[11px] font-black text-amber-600">⏱️ จำนวนชั่วโมง OT:</p>
+                          <input type="number" value={shifts[id].hours} onChange={(e) => setShifts({...shifts, [id]: {...shifts[id], hours: Number(e.target.value)}})} className="w-full p-3 bg-amber-50 border-2 rounded-xl font-bold text-center" />
                         </div>
                       )}
                     </div>
@@ -134,13 +164,15 @@ export default function WardShiftApp() {
                 </div>
               ))}
             </div>
-            <button onClick={handleSaveToSheet} disabled={isSaving} className="w-full bg-green-600 text-white py-5 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition-all">บันทึกลง SHEETS</button>
+            <button onClick={handleSaveToSheet} disabled={isSaving} className="w-full bg-green-600 text-white py-5 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition-all disabled:bg-slate-300">
+              {isSaving ? "กำลังตรวจสอบข้อมูล..." : "บันทึกลง SHEETS"}
+            </button>
           </div>
         ) : (
           <div className="bg-white rounded-3xl shadow-xl overflow-hidden border">
             <div className="bg-indigo-700 p-6 text-white flex justify-between items-center">
               <h2 className="text-xl font-bold uppercase tracking-widest">ตารางปฏิบัติงานนรีเวช</h2>
-              <button onClick={fetchDashboardData} className="text-xs bg-indigo-600 px-4 py-2 rounded-full border border-indigo-400 hover:bg-indigo-500 transition-all">รีเฟรช</button>
+              <button onClick={fetchDashboardData} className="text-xs bg-indigo-600 px-4 py-2 rounded-full border border-indigo-400">รีเฟรช</button>
             </div>
             <div className="overflow-x-auto p-2">
               <table className="min-w-full text-[10px] border-collapse">
@@ -158,27 +190,21 @@ export default function WardShiftApp() {
                           const dObj = new Date(dVal);
                           return dObj.getDate() === day;
                         });
-
                         if (dayRecords.length === 0) return <td key={i} className="border p-1 h-10"></td>;
-
                         let cellBg = dayRecords.length === 1 ? (dayRecords[0]['เวร'] === 'เช้า' ? "bg-yellow-50" : dayRecords[0]['เวร'] === 'บ่าย' ? "bg-orange-50" : dayRecords[0]['เวร'] === 'ดึก' ? "bg-indigo-50" : "bg-slate-100") : "bg-white";
-
                         return (
                           <td key={i} className={`border p-1 text-center h-10 ${cellBg}`}>
                             <div className="flex flex-row items-center justify-center gap-0.5">
-                              {dayRecords.map((record, index) => {
+                              {dayRecords.map((record, idx) => {
                                 const s = record['เวร'] || record['shiftName'];
                                 const type = record['ประเภทงาน'] || "";
                                 let char = s === 'เช้า' ? "ช" : s === 'บ่าย' ? "บ" : s === 'ดึก' ? "ด" : s === 'OFF' ? "O" : s === 'ลาพักร้อน' ? "พ" : s === 'ลาป่วย' ? "ป" : s === 'ลากิจ' ? "ก" : s === 'ลาคลอด' ? "ค" : s === 'ลาศึกษาต่อ' ? "ร" : s === 'ลาพิธีกรรม' ? "ศ" : s.substring(0,1);
-                                
-                                // ⭐️ ส่วนทำ "ตัวยก" สำหรับ OT ⭐️
                                 const isSpecial = type !== 'NORMAL' && type !== 'LEAVE' && type !== "";
-                                
                                 return (
-                                  <span key={index} className="inline-flex items-start">
+                                  <span key={idx} className="inline-flex items-start">
                                     <span className="font-bold text-[10px] text-slate-800">{char}</span>
                                     {isSpecial && <span className="text-[6px] font-black text-red-500 leading-none ml-0.5">{type === 'OT' ? 'OT' : type.substring(0,2)}</span>}
-                                    {index < dayRecords.length - 1 && <span className="text-[10px] text-slate-300 mx-0.5">/</span>}
+                                    {idx < dayRecords.length - 1 && <span className="text-[10px] text-slate-300 mx-0.5">/</span>}
                                   </span>
                                 );
                               })}
