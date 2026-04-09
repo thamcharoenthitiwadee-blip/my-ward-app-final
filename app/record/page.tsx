@@ -10,7 +10,6 @@ export default function WardShiftApp() {
   const [sheetData, setSheetData] = useState<any[]>([]);
   const [leaveType, setLeaveType] = useState<string | null>(null);
 
-  // ✅ ใส่ URL ที่แม่ส่งมาให้เรียบร้อยแล้วครับ
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzY8umdvLZWC1haEHe8kYuRRFCi8OUgYNRIK-7yzqlESRxG99p9E7sbmOk8bkKeDoVGVg/exec";
 
   const initialShift = { active: false, workType: 'NORMAL', hours: 8, extraHours: 0 };
@@ -20,7 +19,6 @@ export default function WardShiftApp() {
     const savedID = localStorage.getItem("nurse_id");
     if (savedID) {
       setNurseID(savedID);
-      // ดึงชื่อพยาบาล (แบบเดิมที่แม่เคยได้ชื่อ)
       fetch(`${SCRIPT_URL}?action=getNurseName&id=${savedID}&t=${Date.now()}`)
         .then(res => res.text())
         .then(name => {
@@ -29,7 +27,6 @@ export default function WardShiftApp() {
         })
         .catch(() => setNurseName("เชื่อมต่อไม่ได้"));
 
-      // ดึงข้อมูล Dashboard
       fetch(`${SCRIPT_URL}?t=${Date.now()}`)
         .then(res => res.json())
         .then(data => setSheetData(data))
@@ -68,7 +65,6 @@ export default function WardShiftApp() {
   return (
     <div className="p-4 bg-slate-100 min-h-screen font-sans">
       <div className="max-w-md mx-auto space-y-4">
-        {/* เมนูสลับหน้า */}
         <div className="flex bg-white p-1 rounded-2xl border shadow-sm">
           <button onClick={() => setView('RECORD')} className={`flex-1 py-3 rounded-xl font-bold ${view === 'RECORD' ? 'bg-green-600 text-white shadow-md' : 'text-slate-400'}`}>บันทึกเวร</button>
           <button onClick={() => setView('DASHBOARD')} className={`flex-1 py-3 rounded-xl font-bold ${view === 'DASHBOARD' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>ตารางเวร Grid</button>
@@ -123,7 +119,7 @@ export default function WardShiftApp() {
             </div>
             <div className="overflow-x-auto p-2">
               <table className="min-w-full text-[10px] border-collapse">
-                <thead><tr className="bg-slate-100"><th className="border p-2 sticky left-0 bg-slate-100 z-10 w-32 font-bold text-slate-600">ชื่อ-สกุล</th>{Array.from({length:31}, (_,i)=><th key={i} className="border p-1 text-center">{i+1}</th>)}</tr></thead>
+                <thead><tr className="bg-slate-100"><th className="border p-2 sticky left-0 bg-slate-100 z-10 w-32 font-bold text-slate-600">ชื่อ-สกุล</th>{Array.from({length:31}, (_,i)=><th key={i} className="border p-1 text-center font-bold text-slate-50">{i + 1}</th>)}</tr></thead>
                 <tbody>
                   {Array.from(new Set(sheetData.map(d=>d['ชื่อพยาบาล']))).filter(Boolean).map(name => (
                     <tr key={name} className="hover:bg-slate-50 border-b">
