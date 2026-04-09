@@ -8,16 +8,12 @@ export default function WardShiftApp() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [isSaving, setIsSaving] = useState(false);
   const [sheetData, setSheetData] = useState<any[]>([]);
-
-  // ส่วนบันทึกวันลา/วันหยุด
   const [leaveType, setLeaveType] = useState<string | null>(null);
 
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzY8umdvLZWC1haEHe8kYuRRFCi8OUgYNRIK-7yzqlESRxG99p9E7sbmOk8bkKeDoVGVg/exec";
-
   const initialShift = { active: false, workType: 'NORMAL', hours: 8, extraHours: 0 };
   const [shifts, setShifts] = useState({ morn: { ...initialShift }, aft: { ...initialShift }, night: { ...initialShift } });
 
-  // 🚀 1. ดึงชื่อพยาบาลจากการสแกน QR 
   useEffect(() => {
     const savedID = localStorage.getItem("nurse_id");
     if (savedID) {
@@ -34,7 +30,6 @@ export default function WardShiftApp() {
     }
   }, []);
 
-  // 📊 2. ดึงข้อมูล Dashboard 
   const fetchDashboardData = async () => {
     try {
       const response = await fetch(SCRIPT_URL);
@@ -45,28 +40,6 @@ export default function WardShiftApp() {
 
   useEffect(() => { if (view === 'DASHBOARD') fetchDashboardData(); }, [view]);
 
-  // สรุปยอดเงินรายคน 
-  const nurseSummaries = useMemo(() => {
-    const summary: Record<string, { shiftBase: number, otAndOthers: number }> = {};
-    sheetData.forEach(row => {
-      const name = row['ชื่อพยาบาล'];
-      const shift = row['เวร'];
-      const type = row['ประเภทงาน'];
-      const totalAmount = Number(row['ยอดเงินรวม']) || 0;
-      if (!name) return;
-      if (!summary[name]) summary[name] = { shiftBase: 0, otAndOthers: 0 };
-      if (type === 'NORMAL') {
-        const baseWage = (shift === 'เช้า' ? 0 : 360);
-        summary[name].shiftBase += baseWage;
-        summary[name].otAndOthers += (totalAmount - baseWage);
-      } else if (type !== 'LEAVE') {
-        summary[name].otAndOthers += totalAmount;
-      }
-    });
-    return Object.entries(summary);
-  }, [sheetData]);
-
-  // 💾 3. บันทึกข้อมูล 
   const handleSaveToSheet = async () => {
     if (nurseName.includes("กำลังดึง")) return alert("รอโหลดชื่อครู่เดียวครับ");
     setIsSaving(true);
@@ -102,104 +75,100 @@ export default function WardShiftApp() {
 
   return (
     <div className="p-4 bg-slate-100 min-h-screen font-sans text-slate-900">
-      <div className="max-w-md mx-auto space-y-4">
+      <div className="max-w-4xl mx-auto space-y-4">
         
-        {/* เมนูสลับหน้า  */}
-        <div className="flex bg-white p-1 rounded-2xl shadow-sm border">
+        <div className="flex bg-white p-1 rounded-2xl shadow-sm border max-w-md mx-auto">
           <button onClick={() => setView('RECORD')} className={`flex-1 py-3 rounded-xl font-bold transition-all ${view === 'RECORD' ? 'bg-green-600 text-white shadow-md' : 'text-slate-400'}`}>บันทึกเวร</button>
-          <button onClick={() => setView('DASHBOARD')} className={`flex-1 py-3 rounded-xl font-bold transition-all ${view === 'DASHBOARD' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>สรุปยอดรวม</button>
+          <button onClick={() => setView('DASHBOARD')} className={`flex-1 py-3 rounded-xl font-bold transition-all ${view === 'DASHBOARD' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400'}`}>ตารางเวร Grid</button>
         </div>
 
         {view === 'RECORD' ? (
-          /* หน้าบันทึกข้อมูล  */
-          <div className="bg-white rounded-3xl shadow-xl p-6 space-y-6 border-t-8 border-green-500">
+          <div className="max-w-md mx-auto bg-white rounded-3xl shadow-xl p-6 space-y-6 border-t-8 border-green-500">
             <div className="bg-green-50 p-4 rounded-2xl border">
               <h2 className="text-xl font-black text-slate-800">{nurseName}</h2>
               <p className="text-xs text-slate-400 font-mono">ID: {nurseID}</p>
             </div>
-
             <div className="bg-slate-50 p-3 rounded-xl border">
               <p className="text-[10px] text-slate-400 mb-1 font-bold italic">เลือกวันที่ปฏิบัติงาน/ลา:</p>
               <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full p-2 bg-white border rounded-lg text-sm font-bold outline-none" />
             </div>
-
-            {/* ส่วนปุ่มวันลา  */}
             <div className="space-y-3">
-              <p className="text-sm font-black text-orange-600">🏖️ วันหยุด / วันลาพัก</p>
+              <p className="text-sm font-black text-orange-600 uppercase">🏖️ วันหยุด / วันลาพัก</p>
               <div className="grid grid-cols-3 gap-2">
-                {['OFF', 'ลาพักร้อน', 'ลาป่วย', 'ลากิจ', 'ลาคลอด', 'เรียนต่อ', 'ศาสนา'].map((type) => (
+                {['OFF', 'ลาพักร้อน', 'ลาป่วย', 'ลากิจ', 'ลาคลอด', 'ลาศึกษาต่อ', 'ลาพิธีกรรม'].map((type) => (
                   <button key={type} onClick={() => { setLeaveType(leaveType === type ? null : type); setShifts({ morn: { ...initialShift }, aft: { ...initialShift }, night: { ...initialShift } }); }}
-                    className={`py-3 rounded-xl text-[11px] font-bold border-2 transition-all ${leaveType === type ? 'bg-orange-500 text-white border-orange-500 shadow-md scale-95' : 'bg-white text-slate-400 border-slate-100'}`}
-                  >
-                    {type === 'เรียนต่อ' ? 'ลาศึกษาต่อ' : type === 'ศาสนา' ? 'ลาพิธีกรรม' : type}
-                  </button>
+                    className={`py-3 rounded-xl text-[10px] font-bold border-2 transition-all ${leaveType === type ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-slate-400 border-slate-100'}`}
+                  >{type}</button>
                 ))}
               </div>
             </div>
-
-            <hr className="border-slate-100" />
-
-            {/* ส่วนบันทึกเวร  */}
+            <hr />
             <div className={`space-y-4 ${leaveType ? 'opacity-20 pointer-events-none' : ''}`}>
-              <p className="text-sm font-black text-green-600">🏥 บันทึกเวรขึ้นจริง</p>
+              <p className="text-sm font-black text-green-600 uppercase">🏥 บันทึกเวรขึ้นจริง</p>
               {(['morn', 'aft', 'night'] as const).map((id) => (
-                <div key={id} className={`p-4 rounded-2xl border-2 ${shifts[id].active ? 'border-green-500 bg-white shadow-md' : 'border-slate-50 bg-slate-50'}`}>
+                <div key={id} className={`p-4 rounded-2xl border-2 ${shifts[id].active ? 'border-green-500 bg-white shadow-md' : 'border-slate-50'}`}>
                   <div className="flex items-center gap-3">
                     <input type="checkbox" checked={shifts[id].active} onChange={() => setShifts({...shifts, [id]: {...shifts[id], active: !shifts[id].active}})} className="w-6 h-6 accent-green-600" />
-                    <span className="font-black text-lg text-slate-700">{id === 'morn' ? '☀️ เช้า' : id === 'aft' ? '⛅ บ่าย' : '🌙 ดึก'}</span>
+                    <span className="font-bold text-lg">{id === 'morn' ? '☀️ เช้า' : id === 'aft' ? '⛅ บ่าย' : '🌙 ดึก'}</span>
                   </div>
                   {shifts[id].active && (
-                    <div className="mt-3 pt-3 border-t border-slate-100 space-y-3">
+                    <div className="mt-3 pt-3 border-t space-y-3">
                       <div className="flex flex-wrap gap-1">
-                        {[{id:'NORMAL', label:'NORMAL'},{id:'OT', label:'OT'},{id:'BB', label:'BB'},{id:'UNIT', label:'ออกหน่วย'},{id:'CT', label:'CT'},{id:'OPD', label:'OPD'},{id:'REF_NO', label:'Ref(ไม่มี)'},{id:'REF_WITH', label:'Ref(มี)'},{id:'REF_OUT', label:'Ref(นอก)'},{id:'REF_BACK', label:'Ref(Back)'}].map((t) => (
-                          <button key={t.id} onClick={() => setShifts({...shifts, [id]: {...shifts[id], workType: t.id}})} className={`px-2 py-1 rounded text-[9px] font-bold border-2 ${shifts[id].workType === t.id ? 'bg-green-600 text-white' : 'bg-white text-slate-400 border-slate-100'}`}>{t.label}</button>
+                        {['NORMAL', 'OT', 'BB', 'UNIT', 'CT', 'OPD', 'REF_NO', 'REF_WITH', 'REF_OUT', 'REF_BACK'].map((t) => (
+                          <button key={t} onClick={() => setShifts({...shifts, [id]: {...shifts[id], workType: t}})} className={`px-2 py-1 rounded text-[9px] font-bold border ${shifts[id].workType === t ? 'bg-green-600 text-white' : 'bg-white text-slate-400'}`}>{t}</button>
                         ))}
                       </div>
-                      {shifts[id].workType === 'NORMAL' ? (
-                        <div className="flex items-center gap-2 bg-blue-50 p-2 rounded-xl"><span className="text-[10px] font-bold text-blue-700">ล่วงเวลา (ชม.):</span><input type="number" value={shifts[id].extraHours} onChange={(e) => setShifts({...shifts, [id]: {...shifts[id], extraHours: Number(e.target.value)}})} className="w-12 p-1 border rounded text-center text-xs" /></div>
-                      ) : !shifts[id].workType.startsWith('REF') && (
-                        <div className="flex items-center gap-2 bg-amber-50 p-2 rounded-xl"><span className="text-[10px] font-bold text-amber-700">จำนวน (ชม.):</span><input type="number" value={shifts[id].hours} onChange={(e) => setShifts({...shifts, [id]: {...shifts[id], hours: Number(e.target.value)}})} className="w-12 p-1 border rounded text-center text-xs" /></div>
-                      )}
                     </div>
                   )}
                 </div>
               ))}
             </div>
-
-            <button onClick={handleSaveToSheet} disabled={isSaving} className="w-full bg-green-600 text-white py-5 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition-all">
-              {isSaving ? "กำลังบันทึก..." : "บันทึกลง SHEETS"}
-            </button>
+            <button onClick={handleSaveToSheet} disabled={isSaving} className="w-full bg-green-600 text-white py-5 rounded-2xl font-black text-xl shadow-lg active:scale-95 transition-all">บันทึกลง SHEETS</button>
           </div>
         ) : (
-          /* หน้า Dashboard สรุปยอดรวม  */
-          <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-200">
+          <div className="bg-white rounded-3xl shadow-xl overflow-hidden border">
             <div className="bg-indigo-700 p-6 text-white flex justify-between items-center">
-              <h2 className="text-xl font-bold uppercase tracking-widest">สรุปยอดรวม</h2>
+              <h2 className="text-xl font-bold uppercase tracking-widest">ตารางปฏิบัติงานนรีเวช</h2>
               <button onClick={fetchDashboardData} className="text-xs bg-indigo-600 px-4 py-2 rounded-full border border-indigo-400">รีเฟรช</button>
             </div>
-            <div className="overflow-x-auto p-4">
-              <table className="w-full text-left">
+            <div className="overflow-x-auto p-2">
+              <table className="min-w-full text-[10px] border-collapse">
                 <thead>
-                  <tr className="border-b text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    <th className="p-4">รายชื่อพยาบาล</th>
-                    <th className="p-4 text-right">ค่าเวร</th>
-                    <th className="p-4 text-right">OT/อื่นๆ</th>
-                    <th className="p-4 text-right text-indigo-600 font-black">สุทธิ</th>
+                  <tr className="bg-slate-100">
+                    <th className="border p-2 sticky left-0 bg-slate-100 z-10 w-32">ชื่อ-สกุล</th>
+                    {Array.from({ length: 31 }, (_, i) => <th key={i} className="border p-1 w-8 text-center">{i + 1}</th>)}
                   </tr>
                 </thead>
-                <tbody className="text-sm">
-                  {nurseSummaries.length > 0 ? nurseSummaries.map(([name, data], i) => (
-                    <tr key={i} className="border-b hover:bg-slate-50 transition-colors">
-                      <td className="p-4 font-black text-slate-700">{name}</td>
-                      <td className="p-4 text-right text-emerald-600 font-bold">{data.shiftBase.toLocaleString()}</td>
-                      <td className="p-4 text-right text-orange-500 font-bold">{data.otAndOthers.toLocaleString()}</td>
-                      <td className="p-4 text-right font-black text-indigo-700">{(data.shiftBase + data.otAndOthers).toLocaleString()}</td>
+                <tbody>
+                  {Array.from(new Set(sheetData.map(d => d['ชื่อพยาบาล']))).filter(Boolean).map(name => (
+                    <tr key={name} className="hover:bg-slate-50 border-b">
+                      <td className="border p-2 font-black text-slate-700 sticky left-0 bg-white shadow-sm z-10 truncate">{name}</td>
+                      {Array.from({ length: 31 }, (_, i) => {
+                        const day = i + 1;
+                        const record = sheetData.find(d => d['ชื่อพยาบาล'] === name && new Date(d['วันที่']).getDate() === day);
+                        let char = ""; let color = "";
+                        if (record) {
+                          const s = record['เวร'];
+                          if (s === 'เช้า') { char = "ช"; color = "bg-yellow-50 text-yellow-700"; }
+                          else if (s === 'บ่าย') { char = "บ"; color = "bg-orange-50 text-orange-700"; }
+                          else if (s === 'ดึก') { char = "ด"; color = "bg-indigo-50 text-indigo-700"; }
+                          else if (s === 'OFF') { char = "O"; color = "bg-slate-100 text-slate-400"; }
+                          else if (s === 'ลาพักร้อน') { char = "พ"; color = "bg-green-50 text-green-700"; }
+                          else if (s === 'ลาป่วย') { char = "ป"; color = "bg-red-50 text-red-700"; }
+                          else if (s === 'ลากิจ') { char = "ก"; color = "bg-pink-50 text-pink-700"; }
+                          else if (s === 'ลาคลอด') { char = "ค"; color = "bg-purple-50 text-purple-700"; }
+                          else if (s === 'ลาศึกษาต่อ') { char = "ร"; color = "bg-cyan-50 text-cyan-700"; }
+                          else if (s === 'ลาพิธีกรรม') { char = "ศ"; color = "bg-amber-50 text-amber-700"; }
+                        }
+                        return <td key={i} className={`border p-1 text-center font-bold h-10 ${color}`}>{char}</td>;
+                      })}
                     </tr>
-                  )) : (
-                    <tr><td colSpan={4} className="p-10 text-center text-slate-300 italic">ยังไม่มีข้อมูล...</td></tr>
-                  )}
+                  ))}
                 </tbody>
               </table>
+            </div>
+            <div className="p-4 bg-slate-50 grid grid-cols-4 gap-1 text-[9px] border-t">
+              <div>ช=เช้า บ=บ่าย ด=ดึก</div><div>O=OFF พ=พักร้อน ป=ป่วย</div><div>ก=กิจ ค=คลอด ร=เรียน</div><div>ศ=ศาสนา</div>
             </div>
           </div>
         )}
