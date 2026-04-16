@@ -7,6 +7,7 @@ export default function WardShiftApp() {
   const [nurseID, setNurseID] = useState("");
   const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [isSaving, setIsSaving] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false); // ✨ สถานะการ Sync
   const [sheetData, setSheetData] = useState<any[]>([]);
   const [leaveType, setLeaveType] = useState<string | null>(null);
 
@@ -14,43 +15,44 @@ export default function WardShiftApp() {
   const initialShift = { active: false, workType: 'NORMAL', hours: 8, extraHours: 0 };
   const [shifts, setShifts] = useState({ morn: { ...initialShift }, aft: { ...initialShift }, night: { ...initialShift } });
 
-  // 🚀 ฟังก์ชันดึงข้อมูลแบบเข้มข้น
   const fetchData = useCallback(async () => {
-    // ดึงรหัสจากหน่วยความจำเครื่อง
     const savedID = typeof window !== 'undefined' ? localStorage.getItem("nurse_id") : null;
-    
-    if (!savedID) {
-      console.log("No ID found in localStorage");
-      window.location.href = "/"; // ถ้าไม่มี ID ให้กลับไปหน้าใส่รหัสทันที
-      return;
-    }
-
+    if (!savedID) { window.location.href = "/"; return; }
     setNurseID(savedID);
 
     try {
-      // 1. ดึงชื่อ (ใส่ t=${Date.now()} กันข้อมูลเก่าค้าง)
       const nRes = await fetch(`${SCRIPT_URL}?action=getNurseName&id=${savedID}&t=${Date.now()}`);
       const nText = await nRes.text();
-      
       if (nText && !nText.includes("<") && nText !== "ไม่พบรายชื่อ") {
         setNurseName(nText.trim());
       } else {
         setNurseName("ไม่พบรหัส: " + savedID);
       }
 
-      // 2. ดึงตาราง Grid
       const dRes = await fetch(`${SCRIPT_URL}?t=${Date.now()}`);
       const dData = await dRes.json();
       setSheetData(dData || []);
     } catch (err) {
-      console.error(err);
-      setNurseName("เชื่อมต่อฐานข้อมูลไม่ได้ (ลองเช็กเน็ตดูครับ)");
+      setNurseName("เชื่อมต่อฐานข้อมูลไม่ได้");
     }
   }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  // 🚀 ฟังก์ชันใหม่: สั่ง Sync ข้อมูลลงหน้าตารางสรุปใน Sheets
+  const handleSyncToSheets = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch(`${SCRIPT_URL}?action=syncGrid&t=${Date.now()}`);
+      const text = await res.text();
+      if (text === "Sync Completed") {
+        alert("🚀 ว้าว! ส่งข้อมูลเข้าตารางสรุปใน Google Sheets เรียบร้อยแล้วครับแม่");
+      }
+    } catch (e) {
+      alert("เกิดข้อผิดพลาดในการ Sync ครับ");
+    }
+    setIsSyncing(false);
+  };
 
   const handleSaveToSheet = async () => {
     if (nurseName.includes("กำลังดึง") || nurseName.includes("ไม่ได้")) return alert("รอให้ชื่อพยาบาลขึ้นก่อนนะครับ");
@@ -107,12 +109,9 @@ export default function WardShiftApp() {
 
         {view === 'RECORD' ? (
           <div className="max-w-md mx-auto bg-white rounded-3xl shadow-xl p-6 space-y-6 border-t-8 border-green-500">
-            <div className={`p-4 rounded-2xl border transition-all ${nurseName.includes("ค้าง") || nurseName.includes("ดึง") ? "bg-amber-50" : "bg-green-50 border-green-100"}`}>
+            <div className="bg-green-50 p-4 rounded-2xl border border-green-100">
               <h2 className="text-xl font-black text-slate-800">{nurseName}</h2>
               <p className="text-xs text-slate-400 font-mono">ID: {nurseID}</p>
-              {nurseName.includes("กำลังดึง") && (
-                <button onClick={() => window.location.href="/"} className="mt-2 text-[10px] text-blue-600 underline">ค้างนาน? กลับไปเข้าสู่ระบบใหม่</button>
-              )}
             </div>
             
             <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-full p-3 bg-slate-50 border-2 rounded-xl font-bold outline-none" />
@@ -156,11 +155,21 @@ export default function WardShiftApp() {
           <div className="bg-white rounded-3xl shadow-xl overflow-hidden border">
             <div className="bg-indigo-700 p-6 text-white flex justify-between items-center">
               <h2 className="text-xl font-bold uppercase tracking-widest leading-tight">ตารางปฏิบัติงานนรีเวช</h2>
-              <button onClick={fetchData} className="text-xs bg-indigo-600 px-4 py-2 rounded-full border border-indigo-400 hover:bg-indigo-500 text-white font-bold">รีเฟรช</button>
+              <div className="flex gap-2">
+                 {/* ✨ ปุ่ม Sync มหัศจรรย์ ✨ */}
+                <button 
+                  onClick={handleSyncToSheets} 
+                  disabled={isSyncing}
+                  className={`text-[10px] px-3 py-2 rounded-full border border-white/30 font-bold transition-all ${isSyncing ? 'bg-slate-500 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-500 shadow-lg active:scale-95'}`}
+                >
+                  {isSyncing ? "กำลังส่ง..." : "🚀 Sync เข้า Sheets"}
+                </button>
+                <button onClick={fetchData} className="text-xs bg-indigo-600 px-4 py-2 rounded-full border border-indigo-400 hover:bg-indigo-500 text-white font-bold">รีเฟรช</button>
+              </div>
             </div>
             <div className="overflow-x-auto p-2">
               <table className="min-w-full text-[10px] border-collapse">
-                <thead><tr className="bg-slate-100"><th className="border p-2 sticky left-0 bg-slate-100 z-10 w-32 font-bold text-slate-600">ชื่อ-สกุล</th>{Array.from({length:31}, (_,i)=><th key={i} className="border p-1 text-center font-bold text-slate-500">{i+1}</th>)}</tr></thead>
+                <thead><tr className="bg-slate-100"><th className="border p-2 sticky left-0 bg-slate-100 z-10 w-32 font-bold text-slate-600">ชื่อ-สกุล</th>{Array.from({length:31}, (_, i)=><th key={i} className="border p-1 w-8 text-center font-bold text-slate-500">{i+1}</th>)}</tr></thead>
                 <tbody>
                   {Array.from(new Set(sheetData.map(d=>d['ชื่อพยาบาล']))).filter(Boolean).map(name => (
                     <tr key={name} className="hover:bg-slate-50 border-b">
@@ -173,22 +182,35 @@ export default function WardShiftApp() {
                           const dObj = new Date(dVal);
                           return d['ชื่อพยาบาล'] === name && dObj.getDate() === day;
                         });
+
                         if (dRecs.length === 0) return <td key={i} className="border p-1 h-10"></td>;
+
                         return (
                           <td key={i} className="border p-1 text-center h-10 bg-white">
                             <div className="flex flex-row items-center justify-center gap-0.5">
-                              {dRecs.map((r, idx) => {
-                                const s = r['เวร'] || ""; const t = r['ประเภทงาน'] || "";
-                                // 🌟 ตัวย่อใหม่ตามคำขอแม่ 🌟
-                                let char = s.includes('เช้า') ? "ช" : s.includes('บ่าย') ? "บ" : s.includes('ดึก') ? "ด" : s.includes('OFF') ? "O" : s.includes('พักร้อน') ? "พ" : s.includes('ป่วย') ? "ป" : s.includes('กิจ') ? "ก" : s.includes('คลอด') ? "ค" : s.includes('ศึกษา') || s.includes('เรียน') ? "ร" : s.includes('ศาสนา') ? "ศ" : s.substring(0,1);
-                                const isSpecial = t !== 'NORMAL' && t !== 'LEAVE' && t !== "";
+                              {dRecs.map((record, index) => {
+                                const sArr = (record['เวร'] || record['shiftName'] || "").split("/");
+                                const tArr = (record['ประเภทงาน'] || record['workType'] || "").split("/");
+                                
                                 return (
-                                  <span key={idx} className="inline-flex items-start">
-                                    <span className="font-bold text-[10px] text-slate-800">{char}</span>
-                                    {/* 🌟 ตัวยกตรงตามประเภทงาน 🌟 */}
-                                    {isSpecial && <sup className="text-[6px] font-black text-red-500 leading-none ml-0.5">{t}</sup>}
-                                    {idx < dRecs.length - 1 && <span className="text-slate-300 mx-0.5">/</span>}
-                                  </span>
+                                  <React.Fragment key={index}>
+                                    <div className="flex gap-0.5 items-start">
+                                      {sArr.map((s: string, sIdx: number) => {
+                                        let char = s.includes('เช้า') ? "ช" : s.includes('บ่าย') ? "บ" : s.includes('ดึก') ? "ด" : s.includes('OFF') ? "O" : s.includes('พักร้อน') ? "พ" : s.includes('ป่วย') ? "ป" : s.includes('กิจ') ? "ก" : s.includes('คลอด') ? "ค" : (s.includes('ศึกษา') || s.includes('เรียน')) ? "ร" : s.includes('ศาสนา') ? "ศ" : s.substring(0,1);
+                                        const type = tArr[sIdx] || tArr[0];
+                                        const isSpecial = type !== 'NORMAL' && type !== 'LEAVE' && type !== "";
+                                        
+                                        return (
+                                          <span key={sIdx} className="inline-flex items-start">
+                                            <span className="font-bold text-[10px] text-slate-800">{char}</span>
+                                            {isSpecial && <sup className="text-[6px] font-black text-red-500 leading-none ml-0.5">{type}</sup>}
+                                            {sIdx < sArr.length - 1 && <span className="text-[10px] text-slate-300 mx-0.5">/</span>}
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                    {index < dRecs.length - 1 && <span className="text-[10px] text-slate-300 mx-0.5">/</span>}
+                                  </React.Fragment>
                                 );
                               })}
                             </div>
@@ -199,6 +221,12 @@ export default function WardShiftApp() {
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="p-4 bg-slate-50 flex flex-wrap gap-x-4 gap-y-1 text-[9px] border-t text-slate-400">
+              <span>ช=เช้า บ=บ่าย ด=ดึก</span>
+              <span>O=OFF พ=พักร้อน ป=ป่วย</span>
+              <span>ก=กิจ ค=คลอด ร=เรียน</span>
+              <span>ศ=ศาสนา</span>
             </div>
           </div>
         )}
