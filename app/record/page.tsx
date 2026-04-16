@@ -7,7 +7,7 @@ export default function WardShiftApp() {
   const [nurseID, setNurseID] = useState("");
   const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [isSaving, setIsSaving] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false); // ✨ สถานะการ Sync
+  const [isSyncing, setIsSyncing] = useState(false);
   const [sheetData, setSheetData] = useState<any[]>([]);
   const [leaveType, setLeaveType] = useState<string | null>(null);
 
@@ -39,7 +39,6 @@ export default function WardShiftApp() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // 🚀 ฟังก์ชันใหม่: สั่ง Sync ข้อมูลลงหน้าตารางสรุปใน Sheets
   const handleSyncToSheets = async () => {
     setIsSyncing(true);
     try {
@@ -136,12 +135,16 @@ export default function WardShiftApp() {
                   {shifts[id].active && (
                     <div className="space-y-4">
                       <div className="flex flex-wrap gap-1">
-                        {['NORMAL', 'OT', 'BB', 'UNIT', 'CT', 'OPD', 'REF_NO', 'REF_WITH', 'REF_OUT', 'REF_BACK'].map(t => (
+                        {/* ✨ เพิ่มประเภทงาน "ประชุม" ลงในลิสต์ ✨ */}
+                        {['NORMAL', 'OT', 'BB', 'UNIT', 'CT', 'OPD', 'ประชุม', 'REF_NO', 'REF_WITH', 'REF_OUT', 'REF_BACK'].map(t => (
                           <button key={t} onClick={() => setShifts({...shifts, [id]: {...shifts[id], workType: t}})} className={`px-2 py-1 rounded text-[9px] font-bold border-2 ${shifts[id].workType === t ? 'bg-green-600 text-white border-green-600' : 'bg-white text-slate-400'}`}>{t}</button>
                         ))}
                       </div>
                       <div className={`flex items-center gap-2 p-2 rounded-lg border-2 ${shifts[id].workType === 'NORMAL' ? 'bg-blue-50 border-blue-100' : 'bg-amber-50 border-amber-100'}`}>
-                        <span className={`text-[10px] font-bold ${shifts[id].workType === 'NORMAL' ? 'text-blue-600' : 'text-amber-600'}`}>{shifts[id].workType === 'NORMAL' ? '⏱️ ล่วงเวลา (ชม.):' : '⏱️ จำนวน (ชม.):'}</span>
+                        {/* ✨ ถ้าเลือก "ประชุม" จะขึ้นคำว่า "จำนวนชั่วโมงประชุม" ✨ */}
+                        <span className={`text-[10px] font-bold ${shifts[id].workType === 'NORMAL' ? 'text-blue-600' : 'text-amber-600'}`}>
+                          {shifts[id].workType === 'NORMAL' ? '⏱️ ล่วงเวลา (ชม.):' : (shifts[id].workType === 'ประชุม' ? '⏱️ ชม. ประชุม:' : '⏱️ จำนวน (ชม.):')}
+                        </span>
                         <input type="number" value={shifts[id].workType === 'NORMAL' ? shifts[id].extraHours : shifts[id].hours} onChange={(e) => setShifts({...shifts, [id]: {...shifts[id], [shifts[id].workType === 'NORMAL' ? 'extraHours' : 'hours']: Number(e.target.value)}})} className="w-20 p-1 border-2 rounded text-center font-bold" />
                       </div>
                     </div>
@@ -156,12 +159,7 @@ export default function WardShiftApp() {
             <div className="bg-indigo-700 p-6 text-white flex justify-between items-center">
               <h2 className="text-xl font-bold uppercase tracking-widest leading-tight">ตารางปฏิบัติงานนรีเวช</h2>
               <div className="flex gap-2">
-                 {/* ✨ ปุ่ม Sync มหัศจรรย์ ✨ */}
-                <button 
-                  onClick={handleSyncToSheets} 
-                  disabled={isSyncing}
-                  className={`text-[10px] px-3 py-2 rounded-full border border-white/30 font-bold transition-all ${isSyncing ? 'bg-slate-500 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-500 shadow-lg active:scale-95'}`}
-                >
+                <button onClick={handleSyncToSheets} disabled={isSyncing} className={`text-[10px] px-3 py-2 rounded-full border border-white/30 font-bold transition-all ${isSyncing ? 'bg-slate-500 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-500 shadow-lg active:scale-95'}`}>
                   {isSyncing ? "กำลังส่ง..." : "🚀 Sync เข้า Sheets"}
                 </button>
                 <button onClick={fetchData} className="text-xs bg-indigo-600 px-4 py-2 rounded-full border border-indigo-400 hover:bg-indigo-500 text-white font-bold">รีเฟรช</button>
@@ -182,16 +180,13 @@ export default function WardShiftApp() {
                           const dObj = new Date(dVal);
                           return d['ชื่อพยาบาล'] === name && dObj.getDate() === day;
                         });
-
                         if (dRecs.length === 0) return <td key={i} className="border p-1 h-10"></td>;
-
                         return (
                           <td key={i} className="border p-1 text-center h-10 bg-white">
                             <div className="flex flex-row items-center justify-center gap-0.5">
                               {dRecs.map((record, index) => {
                                 const sArr = (record['เวร'] || record['shiftName'] || "").split("/");
                                 const tArr = (record['ประเภทงาน'] || record['workType'] || "").split("/");
-                                
                                 return (
                                   <React.Fragment key={index}>
                                     <div className="flex gap-0.5 items-start">
@@ -199,7 +194,6 @@ export default function WardShiftApp() {
                                         let char = s.includes('เช้า') ? "ช" : s.includes('บ่าย') ? "บ" : s.includes('ดึก') ? "ด" : s.includes('OFF') ? "O" : s.includes('พักร้อน') ? "พ" : s.includes('ป่วย') ? "ป" : s.includes('กิจ') ? "ก" : s.includes('คลอด') ? "ค" : (s.includes('ศึกษา') || s.includes('เรียน')) ? "ร" : s.includes('ศาสนา') ? "ศ" : s.substring(0,1);
                                         const type = tArr[sIdx] || tArr[0];
                                         const isSpecial = type !== 'NORMAL' && type !== 'LEAVE' && type !== "";
-                                        
                                         return (
                                           <span key={sIdx} className="inline-flex items-start">
                                             <span className="font-bold text-[10px] text-slate-800">{char}</span>
@@ -221,12 +215,6 @@ export default function WardShiftApp() {
                   ))}
                 </tbody>
               </table>
-            </div>
-            <div className="p-4 bg-slate-50 flex flex-wrap gap-x-4 gap-y-1 text-[9px] border-t text-slate-400">
-              <span>ช=เช้า บ=บ่าย ด=ดึก</span>
-              <span>O=OFF พ=พักร้อน ป=ป่วย</span>
-              <span>ก=กิจ ค=คลอด ร=เรียน</span>
-              <span>ศ=ศาสนา</span>
             </div>
           </div>
         )}
