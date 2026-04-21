@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 export default function WardShiftApp() {
   const [view, setView] = useState<'RECORD' | 'DASHBOARD'>('RECORD');
   const [nurseName, setNurseName] = useState("กำลังดึงข้อมูลชื่อ...");
+  const [nurseWard, setNurseWard] = useState(""); // 🌟 เพิ่ม State สำหรับเก็บชื่อหอผู้ป่วย
   const [nurseID, setNurseID] = useState("");
   const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('en-CA'));
   const [isSaving, setIsSaving] = useState(false);
@@ -15,6 +16,19 @@ export default function WardShiftApp() {
   const initialShift = { active: false, workType: 'NORMAL', hours: 8, extraHours: 0 };
   const [shifts, setShifts] = useState({ morn: { ...initialShift }, aft: { ...initialShift }, night: { ...initialShift } });
 
+  /**
+   * ✨ ฟังก์ชันพิเศษ: ตัวยกแบบพิมพ์เล็กทั้งหมด (Lowercase Superscript)
+   * แปลงอักขระให้เป็นตัวยกพิมพ์เล็กเพื่อความสวยงามตามที่แม่น้องตะวันสั่ง
+   */
+  const toSuperscript = (text: string) => {
+    const chars: { [key: string]: string } = {
+      'a':'ᵃ','b':'ᵇ','c':'ᶜ','d':'ᵈ','e':'ᵉ','f':'ᶠ','g':'ᵍ','h':'ʰ','i':'ⁱ','j':'ʲ','k':'ᵏ','l':'ˡ','m':'ᵐ','n':'ⁿ','o':'ᵒ','p':'ᵖ','q':'ᵠ','r':'ʳ','s':'ˢ','t':'ᵗ','u':'ᵘ','v':'ᵛ','w':'ʷ','x':'ˣ','y':'ʸ','z':'ᶻ',
+      'A':'ᵃ','B':'ᵇ','C':'ᶜ','D':'ᵈ','E':'ᵉ','F':'ᶠ','G':'ᵍ','H':'ʰ','I':'ⁱ','J':'ʲ','K':'ᵏ','L':'ˡ','M':'ᵐ','N':'ⁿ','O':'ᵒ','P':'ᵖ','Q':'ᵠ','R':'ʳ','S':'ˢ','T':'ᵗ','U':'ᵘ','V':'ᵛ','W':'ʷ','X':'ˣ','Y':'ʸ','Z':'ᶻ',
+      '0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'
+    };
+    return text.split('').map(c => chars[c] || c).join('');
+  };
+
   const fetchData = useCallback(async () => {
     const savedID = typeof window !== 'undefined' ? localStorage.getItem("nurse_id") : null;
     if (!savedID) { window.location.href = "/"; return; }
@@ -23,8 +37,12 @@ export default function WardShiftApp() {
     try {
       const nRes = await fetch(`${SCRIPT_URL}?action=getNurseName&id=${savedID}&t=${Date.now()}`);
       const nText = await nRes.text();
+      
       if (nText && !nText.includes("<") && nText !== "ไม่พบรายชื่อ") {
-        setNurseName(nText.trim());
+        // 🌟 แยกข้อมูล ชื่อ และ หอผู้ป่วย (ที่ส่งมาจาก Apps Script ด้วยเครื่องหมาย |)
+        const [name, ward] = nText.split("|");
+        setNurseName(name.trim());
+        setNurseWard(ward ? ward.trim() : "ไม่ระบุวอร์ด");
       } else {
         setNurseName("ไม่พบรหัส: " + savedID);
       }
@@ -55,15 +73,10 @@ export default function WardShiftApp() {
 
   const handleSaveToSheet = async () => {
     if (nurseName.includes("กำลังดึง") || nurseName.includes("ไม่ได้")) return alert("รอให้ชื่อพยาบาลขึ้นก่อนนะครับ");
-
-    const hasDataToday = sheetData.some((d: any) => 
-      String(d['ชื่อพยาบาล']).trim() === nurseName && (d['วันที่'] || d['date']).includes(selectedDate)
-    );
-
+    const hasDataToday = sheetData.some((d: any) => String(d['ชื่อพยาบาล']).trim() === nurseName && (d['วันที่'] || d['date']).includes(selectedDate));
     if (hasDataToday) {
       if (!confirm(`⚠️ วันที่ ${selectedDate} เคยลงบันทึกไว้แล้ว\nหากตกลง ระบบจะล้างเวรเก่าของวันนี้และบันทึกใหม่แทนที่ทันที ยืนยันไหม?`)) return;
     }
-
     setIsSaving(true);
     try {
       const payloads = [];
@@ -75,20 +88,11 @@ export default function WardShiftApp() {
         for (const [id, data] of activeShifts) {
           const sThai = id === 'morn' ? 'เช้า' : id === 'aft' ? 'บ่าย' : 'ดึก';
           const OT_RATE = 650 / 8;
-          let total = (data.workType === 'NORMAL') 
-            ? (id === 'morn' ? 0 : 360) + (data.extraHours * OT_RATE)
-            : (data.workType.startsWith('REF') ? (data.workType === 'REF_NO' ? 325 : data.workType === 'REF_WITH' ? 650 : data.workType === 'REF_OUT' ? 1000 : 800) : (data.hours * OT_RATE));
-          
+          let total = (data.workType === 'NORMAL') ? (id === 'morn' ? 0 : 360) + (data.extraHours * OT_RATE) : (data.workType.startsWith('REF') ? (data.workType === 'REF_NO' ? 325 : data.workType === 'REF_WITH' ? 650 : data.workType === 'REF_OUT' ? 1000 : 800) : (data.hours * OT_RATE));
           payloads.push({ date: selectedDate, nurseName, shiftName: sThai, workType: data.workType, hours: data.workType === 'NORMAL' ? data.extraHours : (data.workType.startsWith('REF') ? 0 : data.hours), total });
         }
       }
-
-      await fetch(SCRIPT_URL, { 
-        method: 'POST', 
-        mode: 'no-cors', 
-        body: JSON.stringify({ nurseName, date: selectedDate, payloads }) 
-      });
-
+      await fetch(SCRIPT_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ nurseName, date: selectedDate, payloads }) });
       alert("✅ บันทึกสำเร็จ!");
       setLeaveType(null);
       setShifts({ morn: { ...initialShift }, aft: { ...initialShift }, night: { ...initialShift } });
@@ -108,7 +112,10 @@ export default function WardShiftApp() {
 
         {view === 'RECORD' ? (
           <div className="max-w-md mx-auto bg-white rounded-3xl shadow-xl p-6 space-y-6 border-t-8 border-green-500">
-            <div className="bg-green-50 p-4 rounded-2xl border border-green-100">
+            {/* 🌟 แสดงชื่อวอร์ดที่ Profile Badge 🌟 */}
+            <div className="bg-green-50 p-4 rounded-2xl border border-green-100 relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-2 bg-green-200/50 rounded-bl-xl text-[10px] font-bold text-green-700 uppercase">{nurseWard}</div>
+              <p className="text-[10px] text-green-600 font-bold mb-1">ยินดีต้อนรับ</p>
               <h2 className="text-xl font-black text-slate-800">{nurseName}</h2>
               <p className="text-xs text-slate-400 font-mono">ID: {nurseID}</p>
             </div>
@@ -135,13 +142,11 @@ export default function WardShiftApp() {
                   {shifts[id].active && (
                     <div className="space-y-4">
                       <div className="flex flex-wrap gap-1">
-                        {/* ✨ เพิ่มประเภทงาน "ประชุม" ลงในลิสต์ ✨ */}
                         {['NORMAL', 'OT', 'BB', 'UNIT', 'CT', 'OPD', 'ประชุม', 'REF_NO', 'REF_WITH', 'REF_OUT', 'REF_BACK'].map(t => (
                           <button key={t} onClick={() => setShifts({...shifts, [id]: {...shifts[id], workType: t}})} className={`px-2 py-1 rounded text-[9px] font-bold border-2 ${shifts[id].workType === t ? 'bg-green-600 text-white border-green-600' : 'bg-white text-slate-400'}`}>{t}</button>
                         ))}
                       </div>
                       <div className={`flex items-center gap-2 p-2 rounded-lg border-2 ${shifts[id].workType === 'NORMAL' ? 'bg-blue-50 border-blue-100' : 'bg-amber-50 border-amber-100'}`}>
-                        {/* ✨ ถ้าเลือก "ประชุม" จะขึ้นคำว่า "จำนวนชั่วโมงประชุม" ✨ */}
                         <span className={`text-[10px] font-bold ${shifts[id].workType === 'NORMAL' ? 'text-blue-600' : 'text-amber-600'}`}>
                           {shifts[id].workType === 'NORMAL' ? '⏱️ ล่วงเวลา (ชม.):' : (shifts[id].workType === 'ประชุม' ? '⏱️ ชม. ประชุม:' : '⏱️ จำนวน (ชม.):')}
                         </span>
@@ -155,9 +160,13 @@ export default function WardShiftApp() {
             <button onClick={handleSaveToSheet} disabled={isSaving || nurseName.includes("กำลังดึง")} className="w-full bg-green-600 text-white py-5 rounded-2xl font-black text-xl shadow-lg active:scale-95">บันทึกลง SHEETS</button>
           </div>
         ) : (
+          /* 🌟 หน้า Dashboard แสดงชื่อหอผู้ป่วยแบบ Dynamic 🌟 */
           <div className="bg-white rounded-3xl shadow-xl overflow-hidden border">
             <div className="bg-indigo-700 p-6 text-white flex justify-between items-center">
-              <h2 className="text-xl font-bold uppercase tracking-widest leading-tight">ตารางปฏิบัติงานนรีเวช</h2>
+              <div>
+                <h2 className="text-xl font-bold uppercase tracking-widest leading-tight">ตารางปฏิบัติงาน</h2>
+                <p className="text-xs text-indigo-200 font-bold">หอผู้ป่วย: {nurseWard}</p>
+              </div>
               <div className="flex gap-2">
                 <button onClick={handleSyncToSheets} disabled={isSyncing} className={`text-[10px] px-3 py-2 rounded-full border border-white/30 font-bold transition-all ${isSyncing ? 'bg-slate-500 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-500 shadow-lg active:scale-95'}`}>
                   {isSyncing ? "กำลังส่ง..." : "🚀 Sync เข้า Sheets"}
@@ -193,11 +202,22 @@ export default function WardShiftApp() {
                                       {sArr.map((s: string, sIdx: number) => {
                                         let char = s.includes('เช้า') ? "ช" : s.includes('บ่าย') ? "บ" : s.includes('ดึก') ? "ด" : s.includes('OFF') ? "O" : s.includes('พักร้อน') ? "พ" : s.includes('ป่วย') ? "ป" : s.includes('กิจ') ? "ก" : s.includes('คลอด') ? "ค" : (s.includes('ศึกษา') || s.includes('เรียน')) ? "ร" : s.includes('ศาสนา') ? "ศ" : s.substring(0,1);
                                         const type = tArr[sIdx] || tArr[0];
+                                        
+                                        // 🌟 ใช้ตัวยกแบบพิมพ์เล็กและโชว์ชั่วโมงเฉพาะ NORMAL 🌟
                                         const isSpecial = type !== 'NORMAL' && type !== 'LEAVE' && type !== "";
+                                        const hours = Number(record['ชั่วโมง'] || record['hours'] || 0);
+                                        
+                                        let tag = "";
+                                        if (type === 'NORMAL' && hours > 0) {
+                                          tag = hours.toString();
+                                        } else if (isSpecial) {
+                                          tag = (type === 'ประชุม') ? 'ปช' : type.toLowerCase();
+                                        }
+
                                         return (
                                           <span key={sIdx} className="inline-flex items-start">
                                             <span className="font-bold text-[10px] text-slate-800">{char}</span>
-                                            {isSpecial && <sup className="text-[6px] font-black text-red-500 leading-none ml-0.5">{type}</sup>}
+                                            {tag !== "" && <sup className="text-[7px] font-bold text-red-500 leading-none ml-0.5">{toSuperscript(tag)}</sup>}
                                             {sIdx < sArr.length - 1 && <span className="text-[10px] text-slate-300 mx-0.5">/</span>}
                                           </span>
                                         );
